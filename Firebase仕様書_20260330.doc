@@ -1,0 +1,217 @@
+# Firebase仕様書（運用手順版）
+
+## 1. 文書の目的
+
+本書は、`rrakuhai-app`で利用しているFirebase設定について、
+「**どのファイルで、何を設定し、どの順番で実施するか**」を明確にすることを目的とする。
+
+## 2. 対象システム
+
+- プロジェクト名: `rrakuhai-app`
+- アプリ構成: `Next.js 14.2.5` + `TypeScript`
+- Firebase SDK: `firebase ^11.8.0`
+- 利用サービス: Firestore / Storage / Authentication / Emulator
+
+## 3. 設定作業マップ（どこで何をやるか）
+
+| 作業内容 | 変更する場所 | 何を設定するか |
+|---|---|---|
+| Firebaseプロジェクトの紐付け | `.firebaserc` | `default` に本番または対象環境のプロジェクトIDを設定 |
+| Firestoreルール定義 | `firestore.rules` | 読み書き権限（現在: 認証済みユーザーのみ） |
+| Firestoreインデックス定義 | `firestore.indexes.json` | 複合クエリ用インデックス（必要時に追加） |
+| Storageルール定義 | `storage.rules` | ファイルの読み書き権限（現在: 認証済みユーザーのみ） |
+| Firebase CLI挙動設定 | `firebase.json` | ルールファイル参照先、エミュレーターポート |
+| アプリ側の接続情報 | `.env.local` | FirebaseのAPIキー、Project IDなど |
+| アプリ側の初期化コード | `src` 配下のFirebase初期化ファイル | `initializeApp` / `getFirestore` / `getStorage` |
+
+## 4. 現在の設定内容（実ファイル準拠）
+
+### 4.1 `.firebaserc`
+
+```json
+{
+  "projects": {
+    "default": "your-firebase-project-id"
+  }
+}
+```
+
+- `your-firebase-project-id` は実際のFirebaseプロジェクトIDへ置換する。
+
+### 4.2 `firebase.json`
+
+```json
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "storage": {
+      "port": 9199
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000
+    }
+  }
+}
+```
+
+- Firestoreのルールは `firestore.rules` を参照。
+- Firestoreインデックス定義は `firestore.indexes.json` を参照。
+- Storageのルールは `storage.rules` を参照。
+
+### 4.3 `firestore.rules`
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
+
+- 現在は「ログイン済みユーザーのみ読み書き可」。
+- 未ログインユーザーは全ドキュメントアクセス不可。
+
+### 4.4 `storage.rules`
+
+```javascript
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
+
+- 現在は「ログイン済みユーザーのみファイル読み書き可」。
+
+## 5. 環境変数設定（アプリ側）
+
+### 5.1 設定先
+
+- ファイル: `.env.local`（プロジェクト直下）
+
+### 5.2 設定する値
+
+```env
+NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
+```
+
+### 5.3 注意
+
+- `.env.local` はGit管理に含めない。
+- 本番値をテスト環境で使い回さない（環境ごとに分離）。
+
+## 6. セットアップ手順（新規メンバー向け）
+
+### 手順1: Firebaseプロジェクト情報を取得
+
+1. Firebaseコンソールで対象プロジェクトを開く。
+2. プロジェクトIDとWebアプリ設定値（APIキー等）を控える。
+
+### 手順2: CLIの紐付け設定
+
+1. `.firebaserc` を開く。
+2. `default` を実プロジェクトIDへ変更する。
+
+### 手順3: アプリ接続情報を設定
+
+1. `.env.local` を作成（未作成の場合）。
+2. 5章の環境変数を設定。
+
+### 手順4: 依存関係を導入
+
+```bash
+npm install
+```
+
+## 7. ローカル開発手順
+
+### 7.1 起動順序
+
+1. Firebase Emulatorを起動:
+
+```bash
+firebase emulators:start
+```
+
+2. 別ターミナルでNext.jsを起動:
+
+```bash
+npm run dev
+```
+
+### 7.2 確認ポイント
+
+- Emulator UI: `http://localhost:4000`
+- Auth Emulator: `9099`
+- Firestore Emulator: `8080`
+- Storage Emulator: `9199`
+
+## 8. 運用ルール（変更時の基準）
+
+### 8.1 セキュリティルール変更時
+
+- 変更対象: `firestore.rules` または `storage.rules`
+- 変更内容は「誰が」「どのデータに」「何ができるか」を明文化する。
+- 変更後はエミュレーターで認可動作を確認する。
+
+### 8.2 インデックス追加時
+
+- 変更対象: `firestore.indexes.json`
+- 追加理由（対象クエリ）をチームへ共有する。
+
+### 8.3 プロジェクト切替時
+
+- 変更対象: `.firebaserc` と `.env.local`
+- 片方だけ変更しない（接続先不整合を防ぐ）。
+
+## 9. よくある障害と確認箇所
+
+| 事象 | 最初に確認する場所 | 対応 |
+|---|---|---|
+| 認証エラー | `.env.local` / Auth Emulator | 環境変数誤り、Emulator未起動を確認 |
+| Firestore権限エラー | `firestore.rules` | ルール条件とログイン状態を確認 |
+| Storage権限エラー | `storage.rules` | ルール条件と対象パスを確認 |
+| 接続先が違う | `.firebaserc` / `.env.local` | プロジェクトIDの不一致を修正 |
+
+## 10. 依存関係（抜粋）
+
+```json
+{
+  "dependencies": {
+    "firebase": "^11.8.0",
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}
+```
+
+---
+
+- 作成日: 2026-03-30
+- 最終更新日: 2026-03-30
+- 文書バージョン: 1.1
