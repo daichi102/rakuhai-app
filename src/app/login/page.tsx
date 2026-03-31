@@ -3,9 +3,27 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FirebaseError } from "firebase/app";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import styles from "./login.module.css";
+
+const mapAuthErrorMessage = (code: string) => {
+  switch (code) {
+    case "auth/invalid-api-key":
+    case "auth/api-key-not-valid-please-pass-a-valid-api-key":
+      return "Firebase APIキーが無効です。.env.local の NEXT_PUBLIC_FIREBASE_API_KEY を確認してください。";
+    case "auth/user-not-found":
+      return "ユーザーが見つかりません。Firebase Authentication の「ユーザー」タブで作成してください。";
+    case "auth/wrong-password":
+    case "auth/invalid-credential":
+      return "メールアドレスまたはパスワードが間違っています。";
+    case "auth/too-many-requests":
+      return "試行回数が多すぎます。少し待ってから再試行してください。";
+    default:
+      return `ログインに失敗しました（${code}）。`;
+  }
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,11 +37,21 @@ export default function LoginPage() {
     setError("");
     setIsLoading(true);
 
+    if (!auth.app.options.apiKey?.startsWith("AIza")) {
+      setError("Firebase APIキーの形式が不正です。.env.local の NEXT_PUBLIC_FIREBASE_API_KEY を確認してください。");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/");
-    } catch {
-      setError("ログインに失敗しました。メールアドレスとパスワードを確認してください。");
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      if (err instanceof FirebaseError) {
+        setError(mapAuthErrorMessage(err.code));
+      } else {
+        setError("ログインに失敗しました。時間をおいて再試行してください。");
+      }
     } finally {
       setIsLoading(false);
     }
