@@ -107,79 +107,94 @@ const priorityClass = (priority: "高" | "中" | "低") => {
 export default function DashboardPage() {
   return (
     <main className={`${styles.page} container`}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>業務ダッシュボード</h1>
-        <p className={styles.subtitle}>今日の状況を一目で確認し、優先対応を判断する画面</p>
-      </header>
+      <div className={styles.layout}>
+        <aside className={styles.sidebar}>
+          <p className={styles.sidebarTitle}>メニュー</p>
+          <nav>
+            <ul className={styles.sidebarList}>
+              <li className={`${styles.sidebarItem} ${styles.sidebarItemActive}`}>案件一覧</li>
+              <li className={styles.sidebarItem}>メール取込み</li>
+              <li className={styles.sidebarItem}>マスタ設定</li>
+            </ul>
+          </nav>
+        </aside>
 
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>今日の案件</h2>
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>案件番号</th>
-                <th>顧客名</th>
-                <th>エリア</th>
-                <th>ステータス</th>
-                <th>予定</th>
-                <th>担当</th>
-                <th>優先度</th>
-              </tr>
-            </thead>
-            <tbody>
-              {todayCases.map((item) => (
-                <tr key={item.inquiryNo}>
-                  <td>{item.inquiryNo}</td>
-                  <td>{item.customerName}</td>
-                  <td>{item.area}</td>
-                  <td>{item.status}</td>
-                  <td>{item.scheduledAt}</td>
-                  <td>{item.assignee}</td>
-                  <td>
-                    <span className={`${styles.priority} ${priorityClass(item.priority)}`}>{item.priority}</span>
-                  </td>
-                </tr>
+        <div className={styles.content}>
+          <header className={styles.header}>
+            <h1 className={styles.title}>業務ダッシュボード</h1>
+            <p className={styles.subtitle}>今日の状況を一目で確認し、優先対応を判断する画面</p>
+          </header>
+
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>今日の案件</h2>
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>案件番号</th>
+                    <th>顧客名</th>
+                    <th>エリア</th>
+                    <th>ステータス</th>
+                    <th>予定</th>
+                    <th>担当</th>
+                    <th>優先度</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {todayCases.map((item) => (
+                    <tr key={item.inquiryNo}>
+                      <td>{item.inquiryNo}</td>
+                      <td>{item.customerName}</td>
+                      <td>{item.area}</td>
+                      <td>{item.status}</td>
+                      <td>{item.scheduledAt}</td>
+                      <td>{item.assignee}</td>
+                      <td>
+                        <span className={`${styles.priority} ${priorityClass(item.priority)}`}>{item.priority}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>ステータス別件数</h2>
+            <div className={styles.cards}>
+              {statusSummaries.map((summary) => (
+                <article
+                  className={`${styles.card} ${summary.tone === "alert" ? styles.cardAlert : ""}`}
+                  key={summary.label}
+                >
+                  <p className={styles.cardLabel}>{summary.label}</p>
+                  <p className={styles.cardCount}>{summary.count}</p>
+                </article>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </div>
+          </section>
 
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>ステータス別件数</h2>
-        <div className={styles.cards}>
-          {statusSummaries.map((summary) => (
-            <article
-              className={`${styles.card} ${summary.tone === "alert" ? styles.cardAlert : ""}`}
-              key={summary.label}
-            >
-              <p className={styles.cardLabel}>{summary.label}</p>
-              <p className={styles.cardCount}>{summary.count}</p>
-            </article>
-          ))}
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>要対応リスト</h2>
+            <ul className={styles.actionList}>
+              {actionItems.map((item) => (
+                <li className={styles.actionItem} key={item.inquiryNo}>
+                  <div className={styles.actionTop}>
+                    <p className={styles.actionTitle}>
+                      {item.inquiryNo} / {item.customerName}
+                    </p>
+                    <span className={`${styles.priority} ${priorityClass(item.priority)}`}>{item.priority}</span>
+                  </div>
+                  <p className={styles.actionReason}>{item.reason}</p>
+                  <p className={styles.actionMeta}>
+                    ステータス: {item.status} / 期限: {item.due} / 担当: {item.assignee}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
         </div>
-      </section>
-
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>要対応リスト</h2>
-        <ul className={styles.actionList}>
-          {actionItems.map((item) => (
-            <li className={styles.actionItem} key={item.inquiryNo}>
-              <div className={styles.actionTop}>
-                <p className={styles.actionTitle}>
-                  {item.inquiryNo} / {item.customerName}
-                </p>
-                <span className={`${styles.priority} ${priorityClass(item.priority)}`}>{item.priority}</span>
-              </div>
-              <p className={styles.actionReason}>{item.reason}</p>
-              <p className={styles.actionMeta}>
-                ステータス: {item.status} / 期限: {item.due} / 担当: {item.assignee}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </section>
+      </div>
     </main>
   );
 }
