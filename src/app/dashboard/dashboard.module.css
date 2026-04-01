@@ -1,4 +1,4 @@
-:root {
+.page {
   --bg: #f5f7fb;
   --card: #ffffff;
   --text: #131722;
@@ -13,9 +13,7 @@
 
   --sidebar: #ffffff;
   --active: #edf4ff;
-}
 
-.page {
   min-height: 100vh;
   background: radial-gradient(circle at 10% 10%, #ffffff 0%, #f5f7fb 45%);
   color: var(--text);
@@ -278,7 +276,7 @@
 .taskTop {
   display: flex;
   justify-content: space-between;
-  align-items: start;
+  align-items: flex-start;
   gap: 10px;
 }
 
