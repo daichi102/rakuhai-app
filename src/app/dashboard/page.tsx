@@ -17,7 +17,7 @@ type TaskCard = {
   priority: "urgent" | "normal";
 };
 
-type OutlookMessage = {
+type MailMessage = {
   id: string;
   subject: string;
   senderName: string;
@@ -40,69 +40,47 @@ const menuItems = ["ダッシュボード", "案件管理", "マスタ設定"];
 
 export default function DashboardPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isOutlookConnected, setIsOutlookConnected] = useState(false);
+  const [isImapConfigured, setIsImapConfigured] = useState(false);
   const [isStatusLoading, setIsStatusLoading] = useState(true);
   const [isMessageLoading, setIsMessageLoading] = useState(false);
-  const [outlookMessages, setOutlookMessages] = useState<OutlookMessage[]>([]);
-  const [outlookError, setOutlookError] = useState("");
+  const [mailMessages, setMailMessages] = useState<MailMessage[]>([]);
+  const [mailError, setMailError] = useState("");
 
   useEffect(() => {
-    const syncOutlookStatus = async () => {
+    const syncMailStatus = async () => {
       try {
-        const response = await fetch("/api/outlook/status", { cache: "no-store" });
-        const data = (await response.json()) as { connected?: boolean };
-        setIsOutlookConnected(Boolean(data.connected));
+        const response = await fetch("/api/mail/status", { cache: "no-store" });
+        const data = (await response.json()) as { configured?: boolean };
+        setIsImapConfigured(Boolean(data.configured));
       } catch {
-        setOutlookError("Outlook接続状態の確認に失敗しました。");
+        setMailError("IMAP設定状態の確認に失敗しました。");
       } finally {
         setIsStatusLoading(false);
       }
     };
 
-    void syncOutlookStatus();
+    void syncMailStatus();
   }, []);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const outlookResult = params.get("outlook");
-    if (outlookResult === "connected") {
-      setOutlookError("");
-      setIsOutlookConnected(true);
-      return;
-    }
-
-    if (outlookResult === "error") {
-      const reason = params.get("reason") ?? "Outlook連携に失敗しました。";
-      setOutlookError(reason);
-    }
-  }, []);
-
-  const startOutlookConnect = () => {
-    window.location.href = "/api/outlook/connect";
-  };
-
-  const loadOutlookMessages = async () => {
-    setOutlookError("");
+  const loadMailMessages = async () => {
+    setMailError("");
     setIsMessageLoading(true);
 
     try {
-      const response = await fetch("/api/outlook/messages", { cache: "no-store" });
+      const response = await fetch("/api/mail/messages", { cache: "no-store" });
       const data = (await response.json()) as {
         error?: string;
-        messages?: OutlookMessage[];
+        messages?: MailMessage[];
       };
 
       if (!response.ok) {
-        setOutlookError(data.error ?? "Outlookメールの読み込みに失敗しました。");
-        if (response.status === 401) {
-          setIsOutlookConnected(false);
-        }
+        setMailError(data.error ?? "IMAPメールの読み込みに失敗しました。");
         return;
       }
 
-      setOutlookMessages(data.messages ?? []);
+      setMailMessages(data.messages ?? []);
     } catch {
-      setOutlookError("Outlookメールの読み込みに失敗しました。");
+      setMailError("IMAPメールの読み込みに失敗しました。");
     } finally {
       setIsMessageLoading(false);
     }
@@ -207,36 +185,33 @@ export default function DashboardPage() {
           <aside className={styles.panel}>
             <div className={styles.panelHeader}>
               <h2>配送読み込み</h2>
-              <span>Outlook</span>
+              <span>IMAP</span>
             </div>
 
             <div className={styles.importPanel}>
-              <p className={styles.importDescription}>Outlookの受信メールから配送情報を読み込みます。</p>
+              <p className={styles.importDescription}>IMAP受信メールから配送情報を読み込みます。</p>
 
               <div className={styles.connectionRow}>
-                <span className={`${styles.connectionBadge} ${isOutlookConnected ? styles.connected : styles.disconnected}`}>
-                  {isStatusLoading ? "確認中..." : isOutlookConnected ? "接続済み" : "未接続"}
+                <span className={`${styles.connectionBadge} ${isImapConfigured ? styles.connected : styles.disconnected}`}>
+                  {isStatusLoading ? "確認中..." : isImapConfigured ? "設定済み" : "未設定"}
                 </span>
               </div>
 
               <div className={styles.importActions}>
-                <button className={styles.secondaryButton} type="button" onClick={startOutlookConnect}>
-                  {isOutlookConnected ? "Outlookを再連携" : "Outlookに接続"}
-                </button>
                 <button
                   className={styles.importButton}
                   type="button"
-                  onClick={loadOutlookMessages}
-                  disabled={!isOutlookConnected || isMessageLoading}
+                  onClick={loadMailMessages}
+                  disabled={!isImapConfigured || isMessageLoading}
                 >
-                  {isMessageLoading ? "読み込み中..." : "Outlookメールを読み込む"}
+                  {isMessageLoading ? "読み込み中..." : "メールを読み込む"}
                 </button>
               </div>
 
-              {outlookError ? <p className={styles.errorText}>{outlookError}</p> : null}
+              {mailError ? <p className={styles.errorText}>{mailError}</p> : null}
 
               <div className={styles.mailList}>
-                {outlookMessages.map((message) => (
+                {mailMessages.map((message) => (
                   <article key={message.id} className={styles.mailCard}>
                     <div className={styles.mailHeader}>
                       <p className={styles.mailSubject}>{message.subject}</p>
@@ -249,8 +224,8 @@ export default function DashboardPage() {
                   </article>
                 ))}
 
-                {outlookMessages.length === 0 ? (
-                  <p className={styles.noMailText}>Outlookメールはまだ読み込まれていません。</p>
+                {mailMessages.length === 0 ? (
+                  <p className={styles.noMailText}>メールはまだ読み込まれていません。</p>
                 ) : null}
               </div>
             </div>
