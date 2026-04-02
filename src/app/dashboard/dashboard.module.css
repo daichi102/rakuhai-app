@@ -23,10 +23,14 @@
   padding: 24px;
 }
 
+.pageCollapsed {
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
 .sidebar {
   background: var(--sidebar);
   border-radius: 24px;
-  padding: 20px 16px;
+  padding: 14px 16px 20px;
   box-shadow: var(--shadow-soft);
   position: sticky;
   top: 24px;
@@ -35,12 +39,34 @@
   flex-direction: column;
 }
 
+.sidebarToggle {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #eff4ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  align-self: flex-end;
+}
+
+.sidebarToggle:hover {
+  background: #e2ebff;
+}
+
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 24px;
   padding: 8px;
+}
+
+.brandMeta {
+  min-width: 0;
 }
 
 .brandIcon {
@@ -105,6 +131,29 @@
   border-radius: 999px;
   background: currentColor;
   opacity: 0.8;
+}
+
+.menuLabel {
+  white-space: nowrap;
+}
+
+.pageCollapsed .brand {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.pageCollapsed .brandMeta,
+.pageCollapsed .menuLabel {
+  display: none;
+}
+
+.pageCollapsed .menuItem {
+  justify-content: center;
+  padding: 0;
+}
+
+.pageCollapsed .sidebarToggle {
+  align-self: center;
 }
 
 .content {
@@ -306,39 +355,150 @@
   opacity: 0.6;
 }
 
-.scheduleList {
+.emptyText {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.importPanel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
-.scheduleCard {
-  background: #fbfcff;
-  border-radius: 14px;
-  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.05);
-  padding: 12px;
-  display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
-  gap: 10px;
+.connectionRow {
+  display: flex;
+  align-items: center;
 }
 
-.scheduleTime {
-  margin: 0;
-  font-size: 13px;
-  color: #2563eb;
+.connectionBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
-.scheduleTitle {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+.connected {
+  color: #047857;
+  background: #d1fae5;
 }
 
-.scheduleOwner {
-  margin: 4px 0 0;
-  font-size: 12px;
+.disconnected {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.importDescription {
+  margin: 0;
+  font-size: 14px;
   color: var(--muted);
+  line-height: 1.5;
+}
+
+.importActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.secondaryButton {
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: #fff;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.importButton {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: #1d4ed8;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.24);
+}
+
+.importButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.importButton:hover {
+  opacity: 0.92;
+}
+
+.errorText {
+  margin: 0;
+  font-size: 13px;
+  color: #b91c1c;
+}
+
+.mailList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.mailCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.mailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mailSubject {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mailTag {
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.mailMeta {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.mailPreview {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.noMailText {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 @media (max-width: 1100px) {
@@ -357,9 +517,27 @@
     padding: 16px;
   }
 
+  .pageCollapsed {
+    grid-template-columns: 1fr;
+  }
+
   .sidebar {
     position: static;
     height: auto;
+  }
+
+  .sidebarToggle {
+    display: none;
+  }
+
+  .pageCollapsed .brandMeta,
+  .pageCollapsed .menuLabel {
+    display: block;
+  }
+
+  .pageCollapsed .menuItem {
+    justify-content: flex-start;
+    padding: 0 12px;
   }
 
   .menu {
