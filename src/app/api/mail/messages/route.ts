@@ -12,6 +12,7 @@ type MailMessage = {
   senderName: string;
   senderAddress: string;
   receivedAt: string;
+  body: string;
   preview: string;
   hasAttachments: boolean;
 };
@@ -21,7 +22,7 @@ const getEnv = (key: string) => (process.env[key] ?? "").trim();
 const getKeywordFilters = () => {
   const raw = getEnv("IMAP_FILTER_KEYWORDS");
   if (!raw) {
-    return ["交換", "差し替え", "交換希望", "回収"];
+    return [];
   }
 
   return raw
@@ -32,12 +33,21 @@ const getKeywordFilters = () => {
 
 const toPreview = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 200);
 
+const DAYS_TO_FETCH = 5;
+
+const getSinceDate = () => {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - (DAYS_TO_FETCH - 1));
+  return date;
+};
+
 const shouldIncludeMessage = (message: MailMessage, keywords: string[]) => {
   if (keywords.length === 0) {
     return true;
   }
 
-  const target = `${message.subject} ${message.preview}`.toLowerCase();
+  const target = `${message.subject} ${message.body} ${message.preview}`.toLowerCase();
   return keywords.some((keyword) => target.includes(keyword));
 };
 
@@ -60,7 +70,6 @@ export async function GET() {
   const user = getEnv("IMAP_USER");
   const password = getEnv("IMAP_PASSWORD");
   const secureRaw = getEnv("IMAP_SECURE").toLowerCase();
-  const fetchLimitRaw = getEnv("IMAP_FETCH_LIMIT");
 
   if (!host || !portRaw || !user || !password) {
     return NextResponse.json(
@@ -77,8 +86,6 @@ export async function GET() {
   }
 
   const secure = secureRaw ? secureRaw === "true" : true;
-  const parsedLimit = Number(fetchLimitRaw || "10");
-  const fetchLimit = Number.isInteger(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 30;
   const keywords = getKeywordFilters();
 
   const client = new ImapFlow({
@@ -103,22 +110,28 @@ export async function GET() {
       return NextResponse.json({ messages: [] });
     }
 
-    const start = Math.max(1, mailbox.exists - fetchLimit + 1);
-    const range = `${start}:${mailbox.exists}`;
+    const sinceDate = getSinceDate();
+    const searchResult = await client.search({ since: sinceDate }, { uid: true });
+    const matchedUids = Array.isArray(searchResult) ? searchResult : [];
+
+    if (matchedUids.length === 0) {
+      return NextResponse.json({ messages: [] });
+    }
+
+    const uids = [...matchedUids].sort((a, b) => b - a);
 
     const messages: MailMessage[] = [];
 
-    for await (const item of client.fetch(range, {
+    for await (const item of client.fetch(uids, {
       uid: true,
       envelope: true,
       internalDate: true,
-      source: {
-        maxLength: 32 * 1024
-      }
+      source: true
     })) {
       const source = item.source ? Buffer.from(item.source) : Buffer.alloc(0);
       const parsed = source.length > 0 ? await simpleParser(source) : null;
       const from = item.envelope?.from?.[0];
+      const body = (parsed?.text || parsed?.html?.toString() || "").replace(/\s+/g, " ").trim();
 
       const message: MailMessage = {
         id: String(item.uid ?? `${item.seq}`),
@@ -126,7 +139,8 @@ export async function GET() {
         senderName: from?.name ?? "",
         senderAddress: from?.address ?? "",
         receivedAt: toIsoString(item.internalDate),
-        preview: toPreview(parsed?.text || parsed?.html?.toString() || ""),
+        body,
+        preview: toPreview(body),
         hasAttachments: Boolean(parsed?.attachments && parsed.attachments.length > 0)
       };
 

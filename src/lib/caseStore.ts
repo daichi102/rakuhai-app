@@ -4,6 +4,7 @@ export type PendingCase = {
   sender: string;
   receivedAt: string;
   preview: string;
+  body?: string;
   importedAt: string;
 };
 

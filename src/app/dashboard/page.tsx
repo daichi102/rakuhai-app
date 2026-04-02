@@ -24,6 +24,7 @@ type MailMessage = {
   senderName: string;
   senderAddress: string;
   receivedAt: string;
+  body: string;
   preview: string;
   hasAttachments: boolean;
 };
@@ -53,6 +54,7 @@ export default function DashboardPage() {
   const [isMessageLoading, setIsMessageLoading] = useState(false);
   const [mailMessages, setMailMessages] = useState<MailMessage[]>([]);
   const [mailError, setMailError] = useState("");
+  const [expandedMailId, setExpandedMailId] = useState<string | null>(null);
 
   useEffect(() => {
     const syncMailStatus = async () => {
@@ -87,6 +89,7 @@ export default function DashboardPage() {
       }
 
       setMailMessages(data.messages ?? []);
+      setExpandedMailId(null);
     } catch {
       setMailError("IMAPメールの読み込みに失敗しました。");
     } finally {
@@ -225,7 +228,19 @@ export default function DashboardPage() {
 
               <div className={styles.mailList}>
                 {mailMessages.map((message) => (
-                  <article key={message.id} className={styles.mailCard}>
+                  <article
+                    key={message.id}
+                    className={`${styles.mailCard} ${styles.mailCardClickable}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setExpandedMailId((current) => (current === message.id ? null : message.id))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setExpandedMailId((current) => (current === message.id ? null : message.id));
+                      }
+                    }}
+                  >
                     <div className={styles.mailHeader}>
                       <p className={styles.mailSubject}>{message.subject}</p>
                       {message.hasAttachments ? <span className={styles.mailTag}>添付あり</span> : null}
@@ -234,6 +249,9 @@ export default function DashboardPage() {
                       {message.senderName || message.senderAddress || "送信者不明"} ・ {formatReceivedAt(message.receivedAt)}
                     </p>
                     <p className={styles.mailPreview}>{message.preview || "本文プレビューなし"}</p>
+                    {expandedMailId === message.id ? (
+                      <pre className={styles.mailBody}>{message.body || "本文なし"}</pre>
+                    ) : null}
                   </article>
                 ))}
 

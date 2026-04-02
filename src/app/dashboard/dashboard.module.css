@@ -458,6 +458,20 @@
   padding: 10px;
 }
 
+.mailCardClickable {
+  cursor: pointer;
+}
+
+.mailCardClickable:hover {
+  border-color: #bfdbfe;
+  background: #f1f5f9;
+}
+
+.mailCardClickable:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .mailHeader {
   display: flex;
   align-items: center;
@@ -493,6 +507,20 @@
   font-size: 13px;
   color: #334155;
   line-height: 1.45;
+}
+
+.mailBody {
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #1e293b;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
 }
 
 .noMailText {

@@ -11,9 +11,12 @@ type MailMessage = {
   senderName: string;
   senderAddress: string;
   receivedAt: string;
+  body: string;
   preview: string;
   hasAttachments: boolean;
 };
+
+const DAYS_TO_FETCH = 5;
 
 const menuItems = [
   { label: "ダッシュボード", path: "/dashboard" },
@@ -21,23 +24,6 @@ const menuItems = [
   { label: "案件管理", path: "/case-management" },
   { label: "マスタ設定", path: "" }
 ];
-
-const isSameLocalDate = (value: string, target: Date) => {
-  if (!value) {
-    return false;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return false;
-  }
-
-  return (
-    date.getFullYear() === target.getFullYear() &&
-    date.getMonth() === target.getMonth() &&
-    date.getDate() === target.getDate()
-  );
-};
 
 const formatDateTime = (value: string) => {
   if (!value) {
@@ -52,6 +38,26 @@ const formatDateTime = (value: string) => {
   return date.toLocaleString("ja-JP");
 };
 
+const isWithinLastDays = (value: string, days: number, baseDate: Date) => {
+  if (!value) {
+    return false;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  const start = new Date(baseDate);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (days - 1));
+
+  const end = new Date(baseDate);
+  end.setHours(23, 59, 59, 999);
+
+  return date >= start && date <= end;
+};
+
 export default function MailImportPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -61,6 +67,7 @@ export default function MailImportPage() {
   const [isMessageLoading, setIsMessageLoading] = useState(false);
   const [pendingCases, setPendingCases] = useState<PendingCase[]>([]);
   const [mailError, setMailError] = useState("");
+  const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
 
   const today = useMemo(() => new Date(), []);
 
@@ -77,7 +84,7 @@ export default function MailImportPage() {
       }
     };
 
-    const storedPending = getPendingCases().filter((item) => isSameLocalDate(item.receivedAt, today));
+    const storedPending = getPendingCases().filter((item) => isWithinLastDays(item.receivedAt, DAYS_TO_FETCH, today));
     setPendingCases(storedPending);
     void syncStatus();
   }, [today]);
@@ -101,13 +108,13 @@ export default function MailImportPage() {
       }
 
       const fetched = data.messages ?? [];
-      const todayMessages = fetched.filter((item) => isSameLocalDate(item.receivedAt, today));
+      const inWindowMessages = fetched.filter((item) => isWithinLastDays(item.receivedAt, DAYS_TO_FETCH, today));
 
       const existingPending = getPendingCases();
       const managed = getManagedCases();
       const excludedIds = new Set([...existingPending.map((item) => item.id), ...managed.map((item) => item.id)]);
 
-      const additions: PendingCase[] = todayMessages
+      const additions: PendingCase[] = inWindowMessages
         .filter((item) => !excludedIds.has(item.id))
         .map((item) => ({
           id: item.id,
@@ -115,12 +122,14 @@ export default function MailImportPage() {
           sender: item.senderName || item.senderAddress || "送信者不明",
           receivedAt: item.receivedAt,
           preview: item.preview,
+          body: item.body,
           importedAt: new Date().toISOString()
         }));
 
       const nextPending = [...existingPending, ...additions];
       savePendingCases(nextPending);
-      setPendingCases(nextPending.filter((item) => isSameLocalDate(item.receivedAt, today)));
+      setPendingCases(nextPending.filter((item) => isWithinLastDays(item.receivedAt, DAYS_TO_FETCH, today)));
+      setExpandedCaseId(null);
     } catch {
       setMailError("メールの読み込みに失敗しました。");
     } finally {
@@ -150,7 +159,8 @@ export default function MailImportPage() {
       ]);
     }
 
-    setPendingCases(remaining.filter((item) => isSameLocalDate(item.receivedAt, today)));
+    setPendingCases(remaining.filter((item) => isWithinLastDays(item.receivedAt, DAYS_TO_FETCH, today)));
+    setExpandedCaseId((current) => (current === caseId ? null : current));
   };
 
   return (
@@ -233,19 +243,34 @@ export default function MailImportPage() {
 
           <aside className={styles.panel}>
             <div className={styles.panelHeader}>
-              <h2>本日の新規未確定案件</h2>
+              <h2>直近5日の新規未確定案件</h2>
               <span>{pendingCases.length}件</span>
             </div>
 
             <div className={styles.mailList}>
               {pendingCases.map((item) => (
-                <article key={item.id} className={styles.mailCard}>
+                <article
+                  key={item.id}
+                  className={`${styles.mailCard} ${styles.mailCardClickable}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setExpandedCaseId((current) => (current === item.id ? null : item.id))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setExpandedCaseId((current) => (current === item.id ? null : item.id));
+                    }
+                  }}
+                >
                   <div className={styles.mailHeader}>
                     <p className={styles.mailSubject}>{item.subject || "(件名なし)"}</p>
                     <button
                       className={styles.secondaryButton}
                       type="button"
-                      onClick={() => transferToCaseManagement(item.id)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        transferToCaseManagement(item.id);
+                      }}
                     >
                       案件管理へ転送
                     </button>
@@ -254,11 +279,12 @@ export default function MailImportPage() {
                     {item.sender} ・ {formatDateTime(item.receivedAt)}
                   </p>
                   <p className={styles.mailPreview}>{item.preview || "本文プレビューなし"}</p>
+                  {expandedCaseId === item.id ? <pre className={styles.mailBody}>{item.body || "本文なし"}</pre> : null}
                 </article>
               ))}
 
               {pendingCases.length === 0 ? (
-                <p className={styles.noMailText}>本日の新規未確定案件はありません。</p>
+                <p className={styles.noMailText}>直近5日の新規未確定案件はありません。</p>
               ) : null}
             </div>
           </aside>
