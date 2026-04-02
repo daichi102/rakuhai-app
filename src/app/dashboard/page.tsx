@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import styles from "./dashboard.module.css";
 
 type StatCard = {
@@ -36,9 +37,16 @@ const stats: StatCard[] = [
 
 const tasks: TaskCard[] = [];
 
-const menuItems = ["ダッシュボード", "案件管理", "マスタ設定"];
+const menuItems = [
+  { label: "ダッシュボード", path: "/dashboard" },
+  { label: "メール取込み", path: "/mail-import" },
+  { label: "案件管理", path: "/case-management" },
+  { label: "マスタ設定", path: "" }
+];
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const pathname = usePathname();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isImapConfigured, setIsImapConfigured] = useState(false);
   const [isStatusLoading, setIsStatusLoading] = useState(true);
@@ -120,14 +128,19 @@ export default function DashboardPage() {
         </div>
 
         <nav className={styles.menu}>
-          {menuItems.map((item, index) => (
+          {menuItems.map((item) => (
             <button
-              key={item}
-              className={`${styles.menuItem} ${index === 0 ? styles.menuItemActive : ""}`}
+              key={item.label}
+              className={`${styles.menuItem} ${pathname === item.path ? styles.menuItemActive : ""}`}
               type="button"
+              onClick={() => {
+                if (item.path) {
+                  router.push(item.path);
+                }
+              }}
             >
               <span className={styles.menuDot} />
-              <span className={styles.menuLabel}>{item}</span>
+              <span className={styles.menuLabel}>{item.label}</span>
             </button>
           ))}
         </nav>
