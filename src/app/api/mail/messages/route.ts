@@ -35,6 +35,7 @@ const toPreview = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 20
 
 const DAYS_TO_FETCH = 5;
 const FETCH_UID_CHUNK_SIZE = 25;
+const FALLBACK_SCAN_LIMIT = 500;
 
 const getSinceDate = () => {
   const date = new Date();
@@ -112,21 +113,41 @@ export async function GET() {
     }
 
     const sinceDate = getSinceDate();
-    const searchResult = await client.search({ since: sinceDate }, { uid: true });
-    const matchedUids = Array.isArray(searchResult) ? searchResult : [];
+    const sinceTimestamp = sinceDate.getTime();
+
+    let matchedUids: number[] = [];
+
+    try {
+      const searchResult = await client.search({ since: sinceDate }, { uid: true });
+      matchedUids = Array.isArray(searchResult) ? searchResult : [];
+    } catch {
+      const fallbackStart = Math.max(1, mailbox.exists - FALLBACK_SCAN_LIMIT + 1);
+      const fallbackRange = `${fallbackStart}:${mailbox.exists}`;
+      const fallbackUids: number[] = [];
+
+      for await (const item of client.fetch(fallbackRange, {
+        uid: true,
+        internalDate: true
+      })) {
+        const receivedAt = item.internalDate instanceof Date ? item.internalDate.getTime() : NaN;
+        if (item.uid && Number.isFinite(receivedAt) && receivedAt >= sinceTimestamp) {
+          fallbackUids.push(item.uid);
+        }
+      }
+
+      matchedUids = fallbackUids;
+    }
 
     if (matchedUids.length === 0) {
       return NextResponse.json({ messages: [] });
     }
 
-    const uids = [...matchedUids].sort((a, b) => b - a);
+    const uids = [...new Set(matchedUids)].sort((a, b) => b - a);
 
-    const messages: MailMessage[] = [];
+    const messagesById = new Map<string, MailMessage>();
 
-    for (let index = 0; index < uids.length; index += FETCH_UID_CHUNK_SIZE) {
-      const uidChunk = uids.slice(index, index + FETCH_UID_CHUNK_SIZE);
-
-      for await (const item of client.fetch(uidChunk, {
+    const readMessagesFromUids = async (targetUids: number[]) => {
+      for await (const item of client.fetch(targetUids, {
         uid: true,
         envelope: true,
         internalDate: true,
@@ -149,10 +170,26 @@ export async function GET() {
         };
 
         if (shouldIncludeMessage(message, keywords)) {
-          messages.push(message);
+          messagesById.set(message.id, message);
+        }
+      }
+    };
+
+    for (let index = 0; index < uids.length; index += FETCH_UID_CHUNK_SIZE) {
+      const uidChunk = uids.slice(index, index + FETCH_UID_CHUNK_SIZE);
+
+      try {
+        await readMessagesFromUids(uidChunk);
+      } catch {
+        for (const uid of uidChunk) {
+          try {
+            await readMessagesFromUids([uid]);
+          } catch {}
         }
       }
     }
+
+    const messages = [...messagesById.values()];
 
     messages.sort((a, b) => {
       const aTime = new Date(a.receivedAt).getTime();
