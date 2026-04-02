@@ -135,9 +135,22 @@ export async function GET() {
     });
 
     return NextResponse.json({ messages });
-  } catch {
+  } catch (error) {
+    const details =
+      error instanceof Error
+        ? {
+            message: error.message,
+            name: error.name
+          }
+        : {
+            message: "unknown error"
+          };
+
     return NextResponse.json(
-      { error: "IMAPメールの取得に失敗しました。接続情報またはメールサーバー設定を確認してください。" },
+      {
+        error: "IMAPメールの取得に失敗しました。接続情報またはメールサーバー設定を確認してください。",
+        details
+      },
       { status: 500 }
     );
   } finally {

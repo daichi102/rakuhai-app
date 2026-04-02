@@ -90,11 +90,13 @@ export default function MailImportPage() {
       const response = await fetch("/api/mail/messages", { cache: "no-store" });
       const data = (await response.json()) as {
         error?: string;
+        details?: { message?: string };
         messages?: MailMessage[];
       };
 
       if (!response.ok) {
-        setMailError(data.error ?? "メールの読み込みに失敗しました。");
+        const detailMessage = data.details?.message ? ` (${data.details.message})` : "";
+        setMailError((data.error ?? "メールの読み込みに失敗しました。") + detailMessage);
         return;
       }
 
