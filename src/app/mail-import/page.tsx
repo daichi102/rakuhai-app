@@ -210,7 +210,7 @@ export default function MailImportPage() {
           </div>
         </header>
 
-        <section className={styles.mainGrid}>
+        <section className={`${styles.mainGrid} ${styles.mailImportGrid}`}>
           <section className={styles.panel}>
             <div className={styles.panelHeader}>
               <h2>メール読み込み</h2>
@@ -247,7 +247,7 @@ export default function MailImportPage() {
               <span>{pendingCases.length}件</span>
             </div>
 
-            <div className={styles.mailList}>
+            <div className={`${styles.mailList} ${styles.mailImportList}`}>
               {pendingCases.map((item) => (
                 <article
                   key={item.id}
