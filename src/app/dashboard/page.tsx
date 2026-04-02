@@ -21,49 +21,15 @@ type ScheduleItem = {
 };
 
 const stats: StatCard[] = [
-  { label: "本日の案件数", value: "24", tone: "blue" },
-  { label: "対応完了", value: "18", tone: "green" },
-  { label: "要対応", value: "6", tone: "orange" },
-  { label: "遅延リスク", value: "2", tone: "violet" }
+  { label: "本日の案件数", value: "0", tone: "blue" },
+  { label: "対応完了", value: "0", tone: "green" },
+  { label: "要対応", value: "0", tone: "orange" },
+  { label: "遅延リスク", value: "0", tone: "violet" }
 ];
 
-const tasks: TaskCard[] = [
-  {
-    id: "A-1024",
-    title: "株式会社青葉商事 / 空調設備交換",
-    date: "2026-04-01",
-    status: "見積確認待ち",
-    priority: "urgent"
-  },
-  {
-    id: "A-1025",
-    title: "有限会社トラスト / LAN配線更新",
-    date: "2026-04-01",
-    status: "作業日程調整中",
-    priority: "normal"
-  },
-  {
-    id: "A-1026",
-    title: "医療法人さくら / 防犯カメラ増設",
-    date: "2026-04-02",
-    status: "部材手配中",
-    priority: "normal"
-  },
-  {
-    id: "A-1027",
-    title: "株式会社東都物流 / 電源工事",
-    date: "2026-04-02",
-    status: "顧客返信待ち",
-    priority: "urgent"
-  }
-];
+const tasks: TaskCard[] = [];
 
-const schedules: ScheduleItem[] = [
-  { time: "09:30", title: "朝会 / 要対応案件レビュー", owner: "営業チーム" },
-  { time: "11:00", title: "A-1024 現地確認", owner: "高橋" },
-  { time: "14:00", title: "A-1026 見積提出", owner: "佐藤" },
-  { time: "16:30", title: "進捗共有ミーティング", owner: "全体" }
-];
+const schedules: ScheduleItem[] = [];
 
 const menuItems = ["ダッシュボード", "案件管理", "スケジュール", "顧客管理", "マスタ設定"];
 
@@ -99,9 +65,6 @@ export default function DashboardPage() {
             <p className={styles.headerCaption}>Overview</p>
             <h1 className={styles.headerTitle}>ダッシュボード</h1>
           </div>
-          <button className={styles.headerButton} type="button">
-            + 新規案件
-          </button>
         </header>
 
         <section className={styles.statsGrid}>
