@@ -3,6 +3,8 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type MailMessage = {
   id: string;
@@ -75,7 +77,7 @@ export async function GET() {
   }
 
   const secure = secureRaw ? secureRaw === "true" : true;
-  const parsedLimit = Number(fetchLimitRaw || "30");
+  const parsedLimit = Number(fetchLimitRaw || "10");
   const fetchLimit = Number.isInteger(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 30;
   const keywords = getKeywordFilters();
 
@@ -83,6 +85,10 @@ export async function GET() {
     host,
     port,
     secure,
+    disableAutoIdle: true,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
       user,
       pass: password
@@ -106,8 +112,9 @@ export async function GET() {
       uid: true,
       envelope: true,
       internalDate: true,
-      bodyStructure: true,
-      source: true
+      source: {
+        maxLength: 32 * 1024
+      }
     })) {
       const source = item.source ? Buffer.from(item.source) : Buffer.alloc(0);
       const parsed = source.length > 0 ? await simpleParser(source) : null;
