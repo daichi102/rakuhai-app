@@ -34,6 +34,7 @@ const getKeywordFilters = () => {
 const toPreview = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 200);
 
 const DAYS_TO_FETCH = 5;
+const FETCH_UID_CHUNK_SIZE = 25;
 
 const getSinceDate = () => {
   const date = new Date();
@@ -122,30 +123,34 @@ export async function GET() {
 
     const messages: MailMessage[] = [];
 
-    for await (const item of client.fetch(uids, {
-      uid: true,
-      envelope: true,
-      internalDate: true,
-      source: true
-    })) {
-      const source = item.source ? Buffer.from(item.source) : Buffer.alloc(0);
-      const parsed = source.length > 0 ? await simpleParser(source) : null;
-      const from = item.envelope?.from?.[0];
-      const body = (parsed?.text || parsed?.html?.toString() || "").replace(/\s+/g, " ").trim();
+    for (let index = 0; index < uids.length; index += FETCH_UID_CHUNK_SIZE) {
+      const uidChunk = uids.slice(index, index + FETCH_UID_CHUNK_SIZE);
 
-      const message: MailMessage = {
-        id: String(item.uid ?? `${item.seq}`),
-        subject: item.envelope?.subject ?? "(件名なし)",
-        senderName: from?.name ?? "",
-        senderAddress: from?.address ?? "",
-        receivedAt: toIsoString(item.internalDate),
-        body,
-        preview: toPreview(body),
-        hasAttachments: Boolean(parsed?.attachments && parsed.attachments.length > 0)
-      };
+      for await (const item of client.fetch(uidChunk, {
+        uid: true,
+        envelope: true,
+        internalDate: true,
+        source: true
+      })) {
+        const source = item.source ? Buffer.from(item.source) : Buffer.alloc(0);
+        const parsed = source.length > 0 ? await simpleParser(source) : null;
+        const from = item.envelope?.from?.[0];
+        const body = (parsed?.text || parsed?.html?.toString() || "").replace(/\s+/g, " ").trim();
 
-      if (shouldIncludeMessage(message, keywords)) {
-        messages.push(message);
+        const message: MailMessage = {
+          id: String(item.uid ?? `${item.seq}`),
+          subject: item.envelope?.subject ?? "(件名なし)",
+          senderName: from?.name ?? "",
+          senderAddress: from?.address ?? "",
+          receivedAt: toIsoString(item.internalDate),
+          body,
+          preview: toPreview(body),
+          hasAttachments: Boolean(parsed?.attachments && parsed.attachments.length > 0)
+        };
+
+        if (shouldIncludeMessage(message, keywords)) {
+          messages.push(message);
+        }
       }
     }
 
