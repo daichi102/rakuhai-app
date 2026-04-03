@@ -1,10 +1,33 @@
 import { NextResponse } from "next/server";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+type AizaInfo = {
+  orderName?: string;
+  orderPhone?: string;
+  orderAddress?: string;
+  customerKana?: string;
+  customerName?: string;
+  customerAddress?: string;
+  customerPhone?: string;
+  productName?: string;
+  productCode?: string;
+  productColor?: string;
+  productQty?: number;
+  inquiryNo?: string;
+  visitDate?: string;
+  hasAttendant?: string;
+  existingRemoval?: string;
+  warranty?: string;
+  notes?: string;
+  staff?: string;
+  caution?: string;
+};
 
 type MailMessage = {
   id: string;
@@ -23,6 +46,7 @@ type MailMessage = {
     contentBase64?: string;
   }[];
   hasExcelAttachment: boolean;
+  aizaInfo?: AizaInfo;
 };
 
 const getEnv = (key: string) => (process.env[key] ?? "").trim();
@@ -52,6 +76,43 @@ const isExcelAttachment = (filename: string, contentType: string) => {
     lowerContentType.includes("spreadsheet") ||
     lowerContentType.includes("excel")
   );
+};
+
+const extractAizaInfo = (contentBase64: string): AizaInfo | undefined => {
+  try {
+    const bytes = Buffer.from(contentBase64, "base64");
+    const workbook = XLSX.read(bytes, { type: "buffer" });
+    const sheet = workbook.Sheets["アイザ"];
+    if (!sheet) {
+      return undefined;
+    }
+
+    const data = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" });
+
+    return {
+      orderName: String(data[8]?.[8] ?? "").trim() || undefined,
+      orderPhone: String(data[9]?.[8] ?? "").trim() || undefined,
+      orderAddress: String(data[10]?.[8] ?? "").trim() || undefined,
+      customerKana: String(data[13]?.[8] ?? "").trim() || undefined,
+      customerName: String(data[14]?.[8] ?? "").trim() || undefined,
+      customerAddress: String(data[15]?.[8] ?? "").trim() || undefined,
+      customerPhone: String(data[16]?.[8] ?? "").trim() || undefined,
+      productName: String(data[19]?.[2] ?? "").trim() || undefined,
+      productCode: String(data[19]?.[8] ?? "").trim() || undefined,
+      productColor: String(data[19]?.[18] ?? "").trim() || undefined,
+      productQty: data[19]?.[21] ? Number(data[19]?.[21]) : undefined,
+      inquiryNo: String(data[25]?.[9] ?? "").trim() || undefined,
+      visitDate: String(data[26]?.[9] ?? "").trim() || undefined,
+      hasAttendant: String(data[28]?.[9] ?? "").trim() || undefined,
+      existingRemoval: String(data[30]?.[9] ?? "").trim() || undefined,
+      warranty: String(data[32]?.[9] ?? "").trim() || undefined,
+      notes: String(data[34]?.[9] ?? "").trim() || undefined,
+      staff: String(data[37]?.[9] ?? "").trim() || undefined,
+      caution: String(data[39]?.[1] ?? "").trim() || undefined
+    };
+  } catch {
+    return undefined;
+  }
 };
 
 const DAYS_TO_FETCH = 5;
@@ -228,6 +289,12 @@ export async function GET() {
       });
       const hasExcelAttachment = attachments.some((attachment) => attachment.isExcel);
 
+      let aizaInfo: AizaInfo | undefined;
+      const excelWithContent = attachments.find((a) => a.isExcel && a.contentBase64);
+      if (excelWithContent && excelWithContent.contentBase64) {
+        aizaInfo = extractAizaInfo(excelWithContent.contentBase64);
+      }
+
       const message: MailMessage = {
         id: String(item.uid ?? `${uid}`),
         subject: item.envelope?.subject ?? "(件名なし)",
@@ -238,7 +305,8 @@ export async function GET() {
         preview: toPreview(body),
         hasAttachments: attachments.length > 0,
         attachments,
-        hasExcelAttachment
+        hasExcelAttachment,
+        aizaInfo
       };
 
       return message;

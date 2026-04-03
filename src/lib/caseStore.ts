@@ -1,3 +1,25 @@
+export type AizaInfo = {
+  orderName?: string;
+  orderPhone?: string;
+  orderAddress?: string;
+  customerKana?: string;
+  customerName?: string;
+  customerAddress?: string;
+  customerPhone?: string;
+  productName?: string;
+  productCode?: string;
+  productColor?: string;
+  productQty?: number;
+  inquiryNo?: string;
+  visitDate?: string;
+  hasAttendant?: string;
+  existingRemoval?: string;
+  warranty?: string;
+  notes?: string;
+  staff?: string;
+  caution?: string;
+};
+
 export type PendingCase = {
   id: string;
   subject: string;
@@ -15,6 +37,7 @@ export type PendingCase = {
     isExcel: boolean;
     contentBase64?: string;
   }[];
+  aizaInfo?: AizaInfo;
   importedAt: string;
 };
 

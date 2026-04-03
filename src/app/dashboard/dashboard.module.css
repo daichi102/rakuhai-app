@@ -978,3 +978,63 @@
 .excelTable tbody tr:hover {
   background: #f8fbff;
 }
+
+/* Aiza Info Section */
+.aizaSection {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.aizaSection h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1d4ed8;
+  margin: 0 0 10px;
+}
+
+.aizaGroup {
+  margin-bottom: 10px;
+}
+
+.aizaGroupTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.aizaRow {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  padding: 2px 0;
+}
+
+.aizaLabel {
+  color: #6b7280;
+  min-width: 80px;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.aizaValue {
+  color: #0f172a;
+  font-weight: 500;
+  flex: 1;
+}
+
+.aizaBadge {
+  display: inline-block;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  font-weight: 600;
+}

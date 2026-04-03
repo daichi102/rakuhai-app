@@ -30,12 +30,35 @@ type MailMessage = {
     contentBase64?: string;
   }[];
   hasExcelAttachment: boolean;
+  aizaInfo?: AizaInfo;
 };
 
 type CaseStatus = "pending" | "managed";
 
 type CaseRow = (PendingCase | ManagedCase) & {
   status: CaseStatus;
+};
+
+type AizaInfo = {
+  orderName?: string;
+  orderPhone?: string;
+  orderAddress?: string;
+  customerKana?: string;
+  customerName?: string;
+  customerAddress?: string;
+  customerPhone?: string;
+  productName?: string;
+  productCode?: string;
+  productColor?: string;
+  productQty?: number;
+  inquiryNo?: string;
+  visitDate?: string;
+  hasAttendant?: string;
+  existingRemoval?: string;
+  warranty?: string;
+  notes?: string;
+  staff?: string;
+  caution?: string;
 };
 
 type ExcelPreview = {
@@ -169,6 +192,7 @@ export default function MailImportPage() {
   const [searchText, setSearchText] = useState("");
   const [selectedCase, setSelectedCase] = useState<CaseRow | null>(null);
   const [excelPreview, setExcelPreview] = useState<ExcelPreview | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const today = useMemo(() => new Date(), []);
 
@@ -271,7 +295,8 @@ export default function MailImportPage() {
           receivedAt: latest.receivedAt,
           preview: latest.preview,
           body: latest.body,
-          attachments: latest.attachments
+          attachments: latest.attachments,
+          aizaInfo: latest.aizaInfo
         };
       });
 
@@ -289,6 +314,7 @@ export default function MailImportPage() {
           preview: item.preview,
           body: item.body,
           attachments: item.attachments,
+          aizaInfo: item.aizaInfo,
           importedAt: new Date().toISOString()
         }));
 
@@ -296,8 +322,10 @@ export default function MailImportPage() {
       savePendingCases(nextPending);
       reloadCaseLists();
       setSelectedCase(null);
+      setHasLoadedOnce(true);
     } catch {
       setMailError("メールの読み込みに失敗しました。");
+      setHasLoadedOnce(true);
     } finally {
       setIsMessageLoading(false);
     }
@@ -481,6 +509,7 @@ export default function MailImportPage() {
                       <td>
                         <p className={styles.tableSubject} title={item.subject || "(件名なし)"}>
                           {item.subject || "(件名なし)"}
+                          {item.aizaInfo ? <span className={styles.aizaBadge}>📋 作業指示書</span> : null}
                         </p>
                       </td>
                       <td>
@@ -507,7 +536,11 @@ export default function MailImportPage() {
                 </tbody>
               </table>
 
-              {filteredRows.length === 0 ? <p className={styles.noMailText}>表示対象のメールはありません。</p> : null}
+              {filteredRows.length === 0 ? (
+                <p className={styles.noMailText}>
+                  {hasLoadedOnce && caseRows.length === 0 ? "最新メールはありません。" : "表示対象のメールはありません。"}
+                </p>
+              ) : null}
             </div>
           </section>
         </section>
@@ -533,6 +566,154 @@ export default function MailImportPage() {
                   <strong>状態:</strong> {selectedCase.status === "pending" ? "未処理" : "処理済"}
                 </p>
               </div>
+
+              {selectedCase.aizaInfo ? (
+                <section className={styles.aizaSection}>
+                  <h4>📋 作業指示書 - アイザ</h4>
+
+                  {selectedCase.aizaInfo.orderName ? (
+                    <div className={styles.aizaGroup}>
+                      <div className={styles.aizaGroupTitle}>対応業者</div>
+                      {selectedCase.aizaInfo.orderName ? (
+                        <div className={styles.aizaRow}>
+                          <span className={styles.aizaLabel}>発注元</span>
+                          <span className={styles.aizaValue}>{selectedCase.aizaInfo.orderName}</span>
+                        </div>
+                      ) : null}
+                      {selectedCase.aizaInfo.orderPhone ? (
+                        <div className={styles.aizaRow}>
+                          <span className={styles.aizaLabel}>電話</span>
+                          <span className={styles.aizaValue}>{selectedCase.aizaInfo.orderPhone}</span>
+                        </div>
+                      ) : null}
+                      {selectedCase.aizaInfo.orderAddress ? (
+                        <div className={styles.aizaRow}>
+                          <span className={styles.aizaLabel}>住所</span>
+                          <span className={styles.aizaValue}>{selectedCase.aizaInfo.orderAddress}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {selectedCase.aizaInfo.customerName ? (
+                    <div className={styles.aizaGroup}>
+                      <div className={styles.aizaGroupTitle}>設置先</div>
+                      {selectedCase.aizaInfo.customerKana ? (
+                        <div className={styles.aizaRow}>
+                          <span className={styles.aizaLabel}>カナ</span>
+                          <span className={styles.aizaValue}>{selectedCase.aizaInfo.customerKana}</span>
+                        </div>
+                      ) : null}
+                      {selectedCase.aizaInfo.customerName ? (
+                        <div className={styles.aizaRow}>
+                          <span className={styles.aizaLabel}>お名前</span>
+                          <span className={styles.aizaValue}>{selectedCase.aizaInfo.customerName}</span>
+                        </div>
+                      ) : null}
+                      {selectedCase.aizaInfo.customerAddress ? (
+                        <div className={styles.aizaRow}>
+                          <span className={styles.aizaLabel}>住所</span>
+                          <span className={styles.aizaValue}>{selectedCase.aizaInfo.customerAddress}</span>
+                        </div>
+                      ) : null}
+                      {selectedCase.aizaInfo.customerPhone ? (
+                        <div className={styles.aizaRow}>
+                          <span className={styles.aizaLabel}>電話</span>
+                          <span className={styles.aizaValue}>{selectedCase.aizaInfo.customerPhone}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {selectedCase.aizaInfo.productName ? (
+                    <div className={styles.aizaGroup}>
+                      <div className={styles.aizaGroupTitle}>設置商品</div>
+                      <div className={styles.aizaRow}>
+                        <span className={styles.aizaLabel}>品名</span>
+                        <span className={styles.aizaValue}>{selectedCase.aizaInfo.productName}</span>
+                      </div>
+                      {selectedCase.aizaInfo.productCode ? (
+                        <div className={styles.aizaRow}>
+                          <span className={styles.aizaLabel}>品番</span>
+                          <span className={styles.aizaValue}>{selectedCase.aizaInfo.productCode}</span>
+                        </div>
+                      ) : null}
+                      {selectedCase.aizaInfo.productColor ? (
+                        <div className={styles.aizaRow}>
+                          <span className={styles.aizaLabel}>色</span>
+                          <span className={styles.aizaValue}>{selectedCase.aizaInfo.productColor}</span>
+                        </div>
+                      ) : null}
+                      {selectedCase.aizaInfo.productQty ? (
+                        <div className={styles.aizaRow}>
+                          <span className={styles.aizaLabel}>数量</span>
+                          <span className={styles.aizaValue}>{selectedCase.aizaInfo.productQty}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <div className={styles.aizaGroup}>
+                    {selectedCase.aizaInfo.inquiryNo ? (
+                      <div className={styles.aizaRow}>
+                        <span className={styles.aizaLabel}>問合番号</span>
+                        <span className={styles.aizaValue}>{selectedCase.aizaInfo.inquiryNo}</span>
+                      </div>
+                    ) : null}
+                    {selectedCase.aizaInfo.visitDate ? (
+                      <div className={styles.aizaRow}>
+                        <span className={styles.aizaLabel}>設置訪問日</span>
+                        <span className={styles.aizaValue}>{selectedCase.aizaInfo.visitDate}</span>
+                      </div>
+                    ) : null}
+                    {selectedCase.aizaInfo.hasAttendant ? (
+                      <div className={styles.aizaRow}>
+                        <span className={styles.aizaLabel}>立会</span>
+                        <span className={styles.aizaValue}>{selectedCase.aizaInfo.hasAttendant}</span>
+                      </div>
+                    ) : null}
+                    {selectedCase.aizaInfo.existingRemoval ? (
+                      <div className={styles.aizaRow}>
+                        <span className={styles.aizaLabel}>既設品搬出</span>
+                        <span className={styles.aizaValue}>{selectedCase.aizaInfo.existingRemoval}</span>
+                      </div>
+                    ) : null}
+                    {selectedCase.aizaInfo.warranty ? (
+                      <div className={styles.aizaRow}>
+                        <span className={styles.aizaLabel}>保証書</span>
+                        <span className={styles.aizaValue}>{selectedCase.aizaInfo.warranty}</span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {selectedCase.aizaInfo.notes ? (
+                    <div className={styles.aizaGroup}>
+                      <div className={styles.aizaGroupTitle}>特記事項</div>
+                      <div className={styles.aizaRow}>
+                        <span className={styles.aizaValue}>{selectedCase.aizaInfo.notes}</span>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedCase.aizaInfo.caution ? (
+                    <div className={styles.aizaGroup}>
+                      <div className={styles.aizaGroupTitle}>注意事項</div>
+                      <div className={styles.aizaRow}>
+                        <span className={styles.aizaValue}>{selectedCase.aizaInfo.caution}</span>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedCase.aizaInfo.staff ? (
+                    <div className={styles.aizaGroup}>
+                      <div className={styles.aizaGroupTitle}>担当者</div>
+                      <div className={styles.aizaRow}>
+                        <span className={styles.aizaValue}>{selectedCase.aizaInfo.staff}</span>
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
 
               {selectedCase.attachments?.filter((file) => file.isExcel).length ? (
                 <section className={styles.attachmentSection}>
