@@ -167,14 +167,33 @@ export async function GET() {
     const messagesById = new Map<string, MailMessage>();
 
     const readMessagesFromUids = async (targetUids: number[]) => {
-      for await (const item of client.fetch(targetUids, {
-        uid: true,
-        envelope: true,
-        internalDate: true,
-        source: true
-      })) {
+      for (const uid of targetUids) {
+        const item = await client.fetchOne(
+          uid,
+          {
+            uid: true,
+            envelope: true,
+            internalDate: true,
+            source: true
+          },
+          { uid: true }
+        );
+
+        if (!item) {
+          continue;
+        }
+
         const source = item.source ? Buffer.from(item.source) : Buffer.alloc(0);
-        const parsed = source.length > 0 ? await simpleParser(source) : null;
+        let parsed: Awaited<ReturnType<typeof simpleParser>> | null = null;
+
+        if (source.length > 0) {
+          try {
+            parsed = await simpleParser(source);
+          } catch {
+            parsed = null;
+          }
+        }
+
         const from = item.envelope?.from?.[0];
         const body = (parsed?.text || parsed?.html?.toString() || "").replace(/\s+/g, " ").trim();
         const attachments = (parsed?.attachments ?? []).map((attachment) => {
@@ -190,7 +209,7 @@ export async function GET() {
         const hasExcelAttachment = attachments.some((attachment) => attachment.isExcel);
 
         const message: MailMessage = {
-          id: String(item.uid ?? `${item.seq}`),
+          id: String(item.uid ?? `${uid}`),
           subject: item.envelope?.subject ?? "(件名なし)",
           senderName: from?.name ?? "",
           senderAddress: from?.address ?? "",
