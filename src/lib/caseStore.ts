@@ -2,9 +2,18 @@ export type PendingCase = {
   id: string;
   subject: string;
   sender: string;
+  senderName?: string;
+  senderAddress?: string;
   receivedAt: string;
   preview: string;
   body?: string;
+  priority?: "urgent" | "normal" | "low";
+  attachments?: {
+    filename: string;
+    size: number;
+    contentType: string;
+    isExcel: boolean;
+  }[];
   importedAt: string;
 };
 

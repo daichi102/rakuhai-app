@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import styles from "../dashboard/dashboard.module.css";
-import { getManagedCases, getPendingCases, saveManagedCases, savePendingCases, type PendingCase } from "@/lib/caseStore";
+import {
+  getManagedCases,
+  getPendingCases,
+  saveManagedCases,
+  savePendingCases,
+  type ManagedCase,
+  type PendingCase
+} from "@/lib/caseStore";
 
 type MailMessage = {
   id: string;
@@ -14,6 +21,19 @@ type MailMessage = {
   body: string;
   preview: string;
   hasAttachments: boolean;
+  attachments: {
+    filename: string;
+    size: number;
+    contentType: string;
+    isExcel: boolean;
+  }[];
+  hasExcelAttachment: boolean;
+};
+
+type CaseStatus = "pending" | "managed";
+
+type CaseRow = (PendingCase | ManagedCase) & {
+  status: CaseStatus;
 };
 
 const DAYS_TO_FETCH = 5;
@@ -37,6 +57,42 @@ const formatDateTime = (value: string) => {
 
   return date.toLocaleString("ja-JP");
 };
+
+const formatSize = (size: number) => {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatSender = (senderName?: string, senderAddress?: string) => {
+  if (senderName && senderAddress) {
+    return `${senderName} <${senderAddress}>`;
+  }
+
+  return senderName || senderAddress || "送信者不明";
+};
+
+const resolvePriority = (subject: string, body: string): "urgent" | "normal" | "low" => {
+  const target = `${subject} ${body}`.toLowerCase();
+
+  if (/(至急|urgent|緊急|本日|当日)/i.test(target)) {
+    return "urgent";
+  }
+
+  if (/(参考|共有|cc|確認のみ|FYI)/i.test(target)) {
+    return "low";
+  }
+
+  return "normal";
+};
+
+const isExchangeRequest = (item: PendingCase | ManagedCase) => /(交換|差し替え|replacement)/i.test(item.subject);
 
 const isWithinLastDays = (value: string, days: number, baseDate: Date) => {
   if (!value) {
@@ -66,10 +122,20 @@ export default function MailImportPage() {
   const [isStatusLoading, setIsStatusLoading] = useState(true);
   const [isMessageLoading, setIsMessageLoading] = useState(false);
   const [pendingCases, setPendingCases] = useState<PendingCase[]>([]);
+  const [managedCases, setManagedCases] = useState<ManagedCase[]>([]);
   const [mailError, setMailError] = useState("");
-  const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
+  const [isUnprocessedOnly, setIsUnprocessedOnly] = useState(true);
+  const [searchText, setSearchText] = useState("");
+  const [selectedCase, setSelectedCase] = useState<CaseRow | null>(null);
 
   const today = useMemo(() => new Date(), []);
+
+  const reloadCaseLists = () => {
+    const nextPending = getPendingCases().filter((item) => isWithinLastDays(item.receivedAt, DAYS_TO_FETCH, today));
+    const nextManaged = getManagedCases().filter((item) => isWithinLastDays(item.receivedAt, DAYS_TO_FETCH, today));
+    setPendingCases(nextPending);
+    setManagedCases(nextManaged);
+  };
 
   useEffect(() => {
     const syncStatus = async () => {
@@ -84,10 +150,45 @@ export default function MailImportPage() {
       }
     };
 
-    const storedPending = getPendingCases().filter((item) => isWithinLastDays(item.receivedAt, DAYS_TO_FETCH, today));
-    setPendingCases(storedPending);
+    reloadCaseLists();
     void syncStatus();
   }, [today]);
+
+  const caseRows = useMemo<CaseRow[]>(() => {
+    const pendingRows = pendingCases.map((item) => ({
+      ...item,
+      status: "pending" as const
+    }));
+    const managedRows = managedCases.map((item) => ({
+      ...item,
+      status: "managed" as const
+    }));
+
+    return [...pendingRows, ...managedRows].sort((a, b) => {
+      const aTime = new Date(a.receivedAt).getTime();
+      const bTime = new Date(b.receivedAt).getTime();
+      return bTime - aTime;
+    });
+  }, [pendingCases, managedCases]);
+
+  const filteredRows = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+
+    return caseRows.filter((item) => {
+      if (isUnprocessedOnly && item.status !== "pending") {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const searchable = `${item.subject} ${item.sender} ${item.senderName ?? ""} ${item.senderAddress ?? ""}`.toLowerCase();
+      return searchable.includes(query);
+    });
+  }, [caseRows, isUnprocessedOnly, searchText]);
+
+  const unprocessedCount = caseRows.filter((item) => item.status === "pending").length;
 
   const loadMailMessages = async () => {
     setMailError("");
@@ -119,17 +220,21 @@ export default function MailImportPage() {
         .map((item) => ({
           id: item.id,
           subject: item.subject,
-          sender: item.senderName || item.senderAddress || "送信者不明",
+          sender: formatSender(item.senderName, item.senderAddress),
+          senderName: item.senderName,
+          senderAddress: item.senderAddress,
           receivedAt: item.receivedAt,
           preview: item.preview,
           body: item.body,
+          priority: resolvePriority(item.subject, item.body),
+          attachments: item.attachments,
           importedAt: new Date().toISOString()
         }));
 
       const nextPending = [...existingPending, ...additions];
       savePendingCases(nextPending);
-      setPendingCases(nextPending.filter((item) => isWithinLastDays(item.receivedAt, DAYS_TO_FETCH, today)));
-      setExpandedCaseId(null);
+      reloadCaseLists();
+      setSelectedCase(null);
     } catch {
       setMailError("メールの読み込みに失敗しました。");
     } finally {
@@ -159,8 +264,50 @@ export default function MailImportPage() {
       ]);
     }
 
-    setPendingCases(remaining.filter((item) => isWithinLastDays(item.receivedAt, DAYS_TO_FETCH, today)));
-    setExpandedCaseId((current) => (current === caseId ? null : current));
+    reloadCaseLists();
+    setSelectedCase((current) => (current?.id === caseId ? null : current));
+  };
+
+  const transferBulkToCaseManagement = () => {
+    const targets = filteredRows.filter((item) => item.status === "pending");
+    if (targets.length === 0) {
+      return;
+    }
+
+    const targetIds = new Set(targets.map((item) => item.id));
+    const pending = getPendingCases();
+    const managed = getManagedCases();
+    const existingManagedIds = new Set(managed.map((item) => item.id));
+
+    const toTransfer = pending.filter((item) => targetIds.has(item.id));
+    const remaining = pending.filter((item) => !targetIds.has(item.id));
+    savePendingCases(remaining);
+
+    const additions = toTransfer
+      .filter((item) => !existingManagedIds.has(item.id))
+      .map((item) => ({
+        ...item,
+        transferredAt: new Date().toISOString()
+      }));
+
+    saveManagedCases([...additions, ...managed]);
+    reloadCaseLists();
+
+    if (selectedCase && targetIds.has(selectedCase.id)) {
+      setSelectedCase(null);
+    }
+  };
+
+  const getPriorityLabel = (priority?: "urgent" | "normal" | "low") => {
+    if (priority === "urgent") {
+      return "至急";
+    }
+
+    if (priority === "low") {
+      return "低";
+    }
+
+    return "通常";
   };
 
   return (
@@ -211,84 +358,164 @@ export default function MailImportPage() {
         </header>
 
         <section className={`${styles.mainGrid} ${styles.mailImportGrid}`}>
-          <section className={styles.panel}>
-            <div className={styles.panelHeader}>
-              <h2>メール読み込み</h2>
-              <span>IMAP</span>
-            </div>
-
-            <div className={styles.importPanel}>
-              <p className={styles.importDescription}>受信メールから本日の新規未確定案件を作成します。</p>
-
-              <div className={styles.connectionRow}>
-                <span className={`${styles.connectionBadge} ${isImapConfigured ? styles.connected : styles.disconnected}`}>
-                  {isStatusLoading ? "確認中..." : isImapConfigured ? "設定済み" : "未設定"}
-                </span>
+          <section className={`${styles.panel} ${styles.mailOpsPanel}`}>
+            <div className={styles.mailOpsHeader}>
+              <div>
+                <p className={styles.mailOpsLabel}>未処理件数</p>
+                <p className={styles.mailOpsCount}>未処理{unprocessedCount}件</p>
               </div>
 
-              <div className={styles.importActions}>
+              <div className={styles.mailOpsButtons}>
+                <button
+                  className={styles.primaryCaseButton}
+                  type="button"
+                  onClick={transferBulkToCaseManagement}
+                  disabled={unprocessedCount === 0}
+                >
+                  一括案件化
+                </button>
                 <button
                   className={styles.importButton}
                   type="button"
                   onClick={loadMailMessages}
                   disabled={!isImapConfigured || isMessageLoading}
                 >
-                  {isMessageLoading ? "読み込み中..." : "メールを読み込む"}
+                  {isMessageLoading ? "再取得中..." : "メール再取得"}
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.mailFilters}>
+              <label className={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  checked={isUnprocessedOnly}
+                  onChange={(event) => setIsUnprocessedOnly(event.target.checked)}
+                />
+                未処理のみ
+              </label>
+
+              <input
+                className={styles.searchInput}
+                type="text"
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="件名・取引先で検索"
+              />
+
+              <span className={`${styles.connectionBadge} ${isImapConfigured ? styles.connected : styles.disconnected}`}>
+                {isStatusLoading ? "IMAP確認中" : isImapConfigured ? "IMAP設定済み" : "IMAP未設定"}
+              </span>
+            </div>
+
+            {mailError ? <p className={styles.errorText}>{mailError}</p> : null}
+
+            <div className={styles.mailTableWrap}>
+              <table className={styles.mailTable}>
+                <thead>
+                  <tr>
+                    <th>状態</th>
+                    <th>優先度</th>
+                    <th>件名</th>
+                    <th>取引先</th>
+                    <th>日時</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((item) => (
+                    <tr key={`${item.status}-${item.id}`} onClick={() => setSelectedCase(item)}>
+                      <td>
+                        <span className={item.status === "pending" ? styles.statusPending : styles.statusManaged}>
+                          {item.status === "pending" ? "未処理" : "処理済"}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={styles[`priority_${item.priority ?? "normal"}`]}>{getPriorityLabel(item.priority)}</span>
+                      </td>
+                      <td>
+                        <p className={styles.tableSubject} title={item.subject || "(件名なし)"}>
+                          {item.subject || "(件名なし)"}
+                        </p>
+                      </td>
+                      <td>
+                        <p className={styles.tableSender} title={item.sender}>
+                          {item.sender}
+                        </p>
+                      </td>
+                      <td>{formatDateTime(item.receivedAt)}</td>
+                      <td>
+                        <button
+                          className={styles.convertButton}
+                          type="button"
+                          disabled={item.status !== "pending"}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            transferToCaseManagement(item.id);
+                          }}
+                        >
+                          案件化
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {filteredRows.length === 0 ? <p className={styles.noMailText}>表示対象のメールはありません。</p> : null}
+            </div>
+          </section>
+        </section>
+
+        {selectedCase ? (
+          <div className={styles.modalOverlay} onClick={() => setSelectedCase(null)}>
+            <div className={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3>{selectedCase.subject || "(件名なし)"}</h3>
+                <button className={styles.modalClose} type="button" onClick={() => setSelectedCase(null)}>
+                  ×
                 </button>
               </div>
 
-              {mailError ? <p className={styles.errorText}>{mailError}</p> : null}
-            </div>
-          </section>
+              <div className={styles.modalMeta}>
+                <p>
+                  <strong>送信者:</strong> {formatSender(selectedCase.senderName, selectedCase.senderAddress)}
+                </p>
+                <p>
+                  <strong>受信日時:</strong> {formatDateTime(selectedCase.receivedAt)}
+                </p>
+                <p>
+                  <strong>状態:</strong> {selectedCase.status === "pending" ? "未処理" : "処理済"}
+                </p>
+              </div>
 
-          <aside className={styles.panel}>
-            <div className={styles.panelHeader}>
-              <h2>直近5日の新規未確定案件</h2>
-              <span>{pendingCases.length}件</span>
-            </div>
-
-            <div className={`${styles.mailList} ${styles.mailImportList}`}>
-              {pendingCases.map((item) => (
-                <article
-                  key={item.id}
-                  className={`${styles.mailCard} ${styles.mailCardClickable}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setExpandedCaseId((current) => (current === item.id ? null : item.id))}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      setExpandedCaseId((current) => (current === item.id ? null : item.id));
-                    }
-                  }}
-                >
-                  <div className={styles.mailHeader}>
-                    <p className={styles.mailSubject}>{item.subject || "(件名なし)"}</p>
-                    <button
-                      className={styles.secondaryButton}
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        transferToCaseManagement(item.id);
-                      }}
-                    >
-                      案件管理へ転送
-                    </button>
-                  </div>
-                  <p className={styles.mailMeta}>
-                    {item.sender} ・ {formatDateTime(item.receivedAt)}
-                  </p>
-                  <p className={styles.mailPreview}>{item.preview || "本文プレビューなし"}</p>
-                  {expandedCaseId === item.id ? <pre className={styles.mailBody}>{item.body || "本文なし"}</pre> : null}
-                </article>
-              ))}
-
-              {pendingCases.length === 0 ? (
-                <p className={styles.noMailText}>直近5日の新規未確定案件はありません。</p>
+              {isExchangeRequest(selectedCase) ? (
+                <section className={styles.attachmentSection}>
+                  <h4>交換依頼のExcel添付</h4>
+                  {selectedCase.attachments?.filter((file) => file.isExcel).length ? (
+                    <ul>
+                      {selectedCase.attachments
+                        ?.filter((file) => file.isExcel)
+                        .map((file) => (
+                          <li key={`${selectedCase.id}-${file.filename}`}>
+                            <span>{file.filename}</span>
+                            <span>{formatSize(file.size)}</span>
+                          </li>
+                        ))}
+                    </ul>
+                  ) : (
+                    <p>Excel添付が見つかりません。</p>
+                  )}
+                </section>
               ) : null}
+
+              <section className={styles.modalBodyWrap}>
+                <h4>本文</h4>
+                <pre className={styles.mailBody}>{selectedCase.body || "本文なし"}</pre>
+              </section>
             </div>
-          </aside>
-        </section>
+          </div>
+        ) : null}
       </section>
     </main>
   );

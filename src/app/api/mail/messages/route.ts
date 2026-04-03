@@ -15,6 +15,13 @@ type MailMessage = {
   body: string;
   preview: string;
   hasAttachments: boolean;
+  attachments: {
+    filename: string;
+    size: number;
+    contentType: string;
+    isExcel: boolean;
+  }[];
+  hasExcelAttachment: boolean;
 };
 
 const getEnv = (key: string) => (process.env[key] ?? "").trim();
@@ -32,6 +39,19 @@ const getKeywordFilters = () => {
 };
 
 const toPreview = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 200);
+
+const isExcelAttachment = (filename: string, contentType: string) => {
+  const lowerFilename = filename.toLowerCase();
+  const lowerContentType = contentType.toLowerCase();
+
+  return (
+    lowerFilename.endsWith(".xlsx") ||
+    lowerFilename.endsWith(".xls") ||
+    lowerFilename.endsWith(".xlsm") ||
+    lowerContentType.includes("spreadsheet") ||
+    lowerContentType.includes("excel")
+  );
+};
 
 const DAYS_TO_FETCH = 5;
 const FETCH_UID_CHUNK_SIZE = 25;
@@ -157,6 +177,17 @@ export async function GET() {
         const parsed = source.length > 0 ? await simpleParser(source) : null;
         const from = item.envelope?.from?.[0];
         const body = (parsed?.text || parsed?.html?.toString() || "").replace(/\s+/g, " ").trim();
+        const attachments = (parsed?.attachments ?? []).map((attachment) => {
+          const filename = attachment.filename ?? "(名称なし)";
+          const contentType = attachment.contentType ?? "application/octet-stream";
+          return {
+            filename,
+            size: attachment.size ?? 0,
+            contentType,
+            isExcel: isExcelAttachment(filename, contentType)
+          };
+        });
+        const hasExcelAttachment = attachments.some((attachment) => attachment.isExcel);
 
         const message: MailMessage = {
           id: String(item.uid ?? `${item.seq}`),
@@ -166,7 +197,9 @@ export async function GET() {
           receivedAt: toIsoString(item.internalDate),
           body,
           preview: toPreview(body),
-          hasAttachments: Boolean(parsed?.attachments && parsed.attachments.length > 0)
+          hasAttachments: attachments.length > 0,
+          attachments,
+          hasExcelAttachment
         };
 
         if (shouldIncludeMessage(message, keywords)) {
