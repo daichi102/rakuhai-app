@@ -26,6 +26,7 @@ type MailMessage = {
     size: number;
     contentType: string;
     isExcel: boolean;
+    contentBase64?: string;
   }[];
   hasExcelAttachment: boolean;
 };
@@ -78,21 +79,30 @@ const formatSender = (senderName?: string, senderAddress?: string) => {
   return senderName || senderAddress || "送信者不明";
 };
 
-const resolvePriority = (subject: string, body: string): "urgent" | "normal" | "low" => {
-  const target = `${subject} ${body}`.toLowerCase();
-
-  if (/(至急|urgent|緊急|本日|当日)/i.test(target)) {
-    return "urgent";
-  }
-
-  if (/(参考|共有|cc|確認のみ|FYI)/i.test(target)) {
-    return "low";
-  }
-
-  return "normal";
-};
-
 const isExchangeRequest = (item: PendingCase | ManagedCase) => /(交換|差し替え|replacement)/i.test(item.subject);
+
+const downloadAttachment = (file: { filename: string; contentType: string; contentBase64?: string }) => {
+  if (!file.contentBase64 || typeof window === "undefined") {
+    return false;
+  }
+
+  const binary = window.atob(file.contentBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  const blob = new Blob([bytes], { type: file.contentType || "application/octet-stream" });
+  const blobUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = blobUrl;
+  anchor.download = file.filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(blobUrl);
+  return true;
+};
 
 const isWithinLastDays = (value: string, days: number, baseDate: Date) => {
   if (!value) {
@@ -213,7 +223,27 @@ export default function MailImportPage() {
 
       const existingPending = getPendingCases();
       const managed = getManagedCases();
-      const excludedIds = new Set([...existingPending.map((item) => item.id), ...managed.map((item) => item.id)]);
+
+      const inWindowById = new Map(inWindowMessages.map((item) => [item.id, item]));
+      const refreshedPending = existingPending.map((item) => {
+        const latest = inWindowById.get(item.id);
+        if (!latest) {
+          return item;
+        }
+
+        return {
+          ...item,
+          sender: formatSender(latest.senderName, latest.senderAddress),
+          senderName: latest.senderName,
+          senderAddress: latest.senderAddress,
+          receivedAt: latest.receivedAt,
+          preview: latest.preview,
+          body: latest.body,
+          attachments: latest.attachments
+        };
+      });
+
+      const excludedIds = new Set([...refreshedPending.map((item) => item.id), ...managed.map((item) => item.id)]);
 
       const additions: PendingCase[] = inWindowMessages
         .filter((item) => !excludedIds.has(item.id))
@@ -226,12 +256,11 @@ export default function MailImportPage() {
           receivedAt: item.receivedAt,
           preview: item.preview,
           body: item.body,
-          priority: resolvePriority(item.subject, item.body),
           attachments: item.attachments,
           importedAt: new Date().toISOString()
         }));
 
-      const nextPending = [...existingPending, ...additions];
+      const nextPending = [...refreshedPending, ...additions];
       savePendingCases(nextPending);
       reloadCaseLists();
       setSelectedCase(null);
@@ -296,18 +325,6 @@ export default function MailImportPage() {
     if (selectedCase && targetIds.has(selectedCase.id)) {
       setSelectedCase(null);
     }
-  };
-
-  const getPriorityLabel = (priority?: "urgent" | "normal" | "low") => {
-    if (priority === "urgent") {
-      return "至急";
-    }
-
-    if (priority === "low") {
-      return "低";
-    }
-
-    return "通常";
   };
 
   return (
@@ -415,7 +432,6 @@ export default function MailImportPage() {
                 <thead>
                   <tr>
                     <th>状態</th>
-                    <th>優先度</th>
                     <th>件名</th>
                     <th>取引先</th>
                     <th>日時</th>
@@ -429,9 +445,6 @@ export default function MailImportPage() {
                         <span className={item.status === "pending" ? styles.statusPending : styles.statusManaged}>
                           {item.status === "pending" ? "未処理" : "処理済"}
                         </span>
-                      </td>
-                      <td>
-                        <span className={styles[`priority_${item.priority ?? "normal"}`]}>{getPriorityLabel(item.priority)}</span>
                       </td>
                       <td>
                         <p className={styles.tableSubject} title={item.subject || "(件名なし)"}>
@@ -499,7 +512,21 @@ export default function MailImportPage() {
                         .map((file) => (
                           <li key={`${selectedCase.id}-${file.filename}`}>
                             <span>{file.filename}</span>
-                            <span>{formatSize(file.size)}</span>
+                            <span className={styles.attachmentActions}>
+                              <span>{formatSize(file.size)}</span>
+                              <button
+                                className={styles.attachmentButton}
+                                type="button"
+                                onClick={() => {
+                                  const isDownloaded = downloadAttachment(file);
+                                  if (!isDownloaded) {
+                                    setMailError("このExcel添付は読み込みデータが不足しているため開けません。メール再取得を実行してください。");
+                                  }
+                                }}
+                              >
+                                Excelを開く
+                              </button>
+                            </span>
                           </li>
                         ))}
                     </ul>

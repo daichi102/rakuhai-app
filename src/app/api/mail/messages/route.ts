@@ -20,6 +20,7 @@ type MailMessage = {
     size: number;
     contentType: string;
     isExcel: boolean;
+    contentBase64?: string;
   }[];
   hasExcelAttachment: boolean;
 };
@@ -199,11 +200,15 @@ export async function GET() {
         const attachments = (parsed?.attachments ?? []).map((attachment) => {
           const filename = attachment.filename ?? "(名称なし)";
           const contentType = attachment.contentType ?? "application/octet-stream";
+          const contentBase64 = Buffer.isBuffer(attachment.content)
+            ? attachment.content.toString("base64")
+            : undefined;
           return {
             filename,
             size: attachment.size ?? 0,
             contentType,
-            isExcel: isExcelAttachment(filename, contentType)
+            isExcel: isExcelAttachment(filename, contentType),
+            contentBase64
           };
         });
         const hasExcelAttachment = attachments.some((attachment) => attachment.isExcel);

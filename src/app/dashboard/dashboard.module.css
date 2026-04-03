@@ -648,6 +648,27 @@
   color: #1e3a8a;
 }
 
+.attachmentActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attachmentButton {
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 10px;
+  background: #1d4ed8;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.attachmentButton:hover {
+  opacity: 0.92;
+}
+
 .attachmentSection p {
   margin: 8px 0 0;
   font-size: 13px;

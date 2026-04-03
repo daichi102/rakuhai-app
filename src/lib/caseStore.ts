@@ -13,6 +13,7 @@ export type PendingCase = {
     size: number;
     contentType: string;
     isExcel: boolean;
+    contentBase64?: string;
   }[];
   importedAt: string;
 };
