@@ -199,9 +199,25 @@ export async function GET() {
       const attachments = (parsed?.attachments ?? []).map((attachment) => {
         const filename = attachment.filename ?? "(名称なし)";
         const contentType = attachment.contentType ?? "application/octet-stream";
-        const contentBase64 = Buffer.isBuffer(attachment.content)
-          ? attachment.content.toString("base64")
-          : undefined;
+        let contentBase64: string | undefined;
+
+        const content = attachment.content;
+        if (Buffer.isBuffer(content)) {
+          contentBase64 = content.toString("base64");
+        } else if (typeof content === "string") {
+          contentBase64 = content;
+        } else if (content && typeof content === "object" && "length" in content) {
+          try {
+            contentBase64 = Buffer.from(content as Uint8Array).toString("base64");
+          } catch {
+            contentBase64 = undefined;
+          }
+        }
+
+        if (isExcelAttachment(filename, contentType) && !contentBase64) {
+          console.warn(`[Mail Parser] Excel attachment without base64: ${filename} (size: ${attachment.size}, type: ${typeof content})`);
+        }
+
         return {
           filename,
           size: attachment.size ?? 0,
