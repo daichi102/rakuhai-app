@@ -148,7 +148,10 @@ const toIsoString = (value: string | Date | undefined) => {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
 };
 
-export async function GET() {
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const includeBase64 = url.searchParams.get("includeBase64") === "true";
+
   const host = getEnv("IMAP_HOST");
   const portRaw = getEnv("IMAP_PORT");
   const user = getEnv("IMAP_USER");
@@ -334,7 +337,20 @@ export async function GET() {
       return bTime - aTime;
     });
 
-    return NextResponse.json({ messages });
+    // Conditionally include contentBase64 based on query parameter
+    const processedMessages = includeBase64
+      ? messages
+      : messages.map((msg) => ({
+          ...msg,
+          attachments: msg.attachments.map((att) => ({
+            filename: att.filename,
+            size: att.size,
+            contentType: att.contentType,
+            isExcel: att.isExcel
+          }))
+        }));
+
+    return NextResponse.json({ messages: processedMessages });
   } catch (error) {
     const details =
       error instanceof Error

@@ -239,6 +239,7 @@ export default function MailImportPage() {
   const [selectedCase, setSelectedCase] = useState<CaseRow | null>(null);
   const [excelPreview, setExcelPreview] = useState<ExcelPreview | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [messagesWithBase64, setMessagesWithBase64] = useState<Map<string, MailMessage>>(new Map());
 
   const today = useMemo(() => new Date(), []);
 
@@ -307,7 +308,7 @@ export default function MailImportPage() {
     setIsMessageLoading(true);
 
     try {
-      const response = await fetch("/api/mail/messages", { cache: "no-store" });
+      const response = await fetch("/api/mail/messages?includeBase64=true", { cache: "no-store" });
       const data = (await response.json()) as {
         error?: string;
         details?: { message?: string };
@@ -323,10 +324,21 @@ export default function MailImportPage() {
       const fetched = data.messages ?? [];
       const inWindowMessages = fetched.filter((item) => isWithinLastDays(item.receivedAt, DAYS_TO_FETCH, today));
 
+      // Remove contentBase64 before saving to localStorage
+      const inWindowMessagesClean = inWindowMessages.map((msg) => ({
+        ...msg,
+        attachments: msg.attachments.map((att) => ({
+          filename: att.filename,
+          size: att.size,
+          contentType: att.contentType,
+          isExcel: att.isExcel
+        }))
+      }));
+
       const existingPending = getPendingCases();
       const managed = getManagedCases();
 
-      const inWindowById = new Map(inWindowMessages.map((item) => [item.id, item]));
+      const inWindowById = new Map(inWindowMessagesClean.map((item) => [item.id, item]));
       const refreshedPending = existingPending.map((item) => {
         const latest = inWindowById.get(item.id);
         if (!latest) {
@@ -348,7 +360,7 @@ export default function MailImportPage() {
 
       const excludedIds = new Set([...refreshedPending.map((item) => item.id), ...managed.map((item) => item.id)]);
 
-      const additions: PendingCase[] = inWindowMessages
+      const additions: PendingCase[] = inWindowMessagesClean
         .filter((item) => !excludedIds.has(item.id))
         .map((item) => ({
           id: item.id,
@@ -363,6 +375,10 @@ export default function MailImportPage() {
           aizaInfo: item.aizaInfo,
           importedAt: new Date().toISOString()
         }));
+
+      // Store full messages with base64 for later use
+      const base64Map = new Map(fetched.map((item) => [item.id, item]));
+      setMessagesWithBase64(base64Map);
 
       const nextPending = [...refreshedPending, ...additions];
       savePendingCases(nextPending);
@@ -436,7 +452,22 @@ export default function MailImportPage() {
   const handleSelectCase = (item: CaseRow) => {
     // アイザ情報がなければ、Excelから自動抽出
     if (!item.aizaInfo && item.attachments?.length) {
-      const excelFile = item.attachments.find((a) => a.isExcel && a.contentBase64);
+      // Try to find contentBase64 from memory first
+      let excelFile = item.attachments.find((a) => a.isExcel && a.contentBase64);
+
+      // If not in attachments, try to get from messagesWithBase64
+      if (!excelFile) {
+        const messageWithBase64 = messagesWithBase64.get(item.id);
+        if (messageWithBase64) {
+          const excelInMemory = messageWithBase64.attachments.find(
+            (a) => a.isExcel && a.contentBase64
+          );
+          if (excelInMemory && excelInMemory.contentBase64) {
+            excelFile = excelInMemory;
+          }
+        }
+      }
+
       if (excelFile && excelFile.contentBase64) {
         const extractedAiza = extractAizaInfoFromBase64(excelFile.contentBase64);
         if (extractedAiza) {
