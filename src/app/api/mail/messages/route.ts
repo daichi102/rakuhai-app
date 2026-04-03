@@ -116,9 +116,9 @@ export async function GET() {
     port,
     secure,
     disableAutoIdle: true,
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
     auth: {
       user,
       pass: password
