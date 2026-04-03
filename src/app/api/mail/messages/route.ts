@@ -55,7 +55,7 @@ const isExcelAttachment = (filename: string, contentType: string) => {
 };
 
 const DAYS_TO_FETCH = 5;
-const FETCH_UID_CHUNK_SIZE = 25;
+const FETCH_UID_CHUNK_SIZE = 10;
 const FALLBACK_SCAN_LIMIT = 500;
 
 const getSinceDate = () => {
@@ -167,81 +167,77 @@ export async function GET() {
 
     const messagesById = new Map<string, MailMessage>();
 
-    const readMessagesFromUids = async (targetUids: number[]) => {
-      for (const uid of targetUids) {
-        const item = await client.fetchOne(
-          uid,
-          {
-            uid: true,
-            envelope: true,
-            internalDate: true,
-            source: true
-          },
-          { uid: true }
-        );
+    const readSingleMessage = async (uid: number): Promise<MailMessage | null> => {
+      const item = await client.fetchOne(
+        uid,
+        {
+          uid: true,
+          envelope: true,
+          internalDate: true,
+          source: true
+        },
+        { uid: true }
+      );
 
-        if (!item) {
-          continue;
-        }
+      if (!item) {
+        return null;
+      }
 
-        const source = item.source ? Buffer.from(item.source) : Buffer.alloc(0);
-        let parsed: Awaited<ReturnType<typeof simpleParser>> | null = null;
+      const source = item.source ? Buffer.from(item.source) : Buffer.alloc(0);
+      let parsed: Awaited<ReturnType<typeof simpleParser>> | null = null;
 
-        if (source.length > 0) {
-          try {
-            parsed = await simpleParser(source);
-          } catch {
-            parsed = null;
-          }
-        }
-
-        const from = item.envelope?.from?.[0];
-        const body = (parsed?.text || parsed?.html?.toString() || "").replace(/\s+/g, " ").trim();
-        const attachments = (parsed?.attachments ?? []).map((attachment) => {
-          const filename = attachment.filename ?? "(名称なし)";
-          const contentType = attachment.contentType ?? "application/octet-stream";
-          const contentBase64 = Buffer.isBuffer(attachment.content)
-            ? attachment.content.toString("base64")
-            : undefined;
-          return {
-            filename,
-            size: attachment.size ?? 0,
-            contentType,
-            isExcel: isExcelAttachment(filename, contentType),
-            contentBase64
-          };
-        });
-        const hasExcelAttachment = attachments.some((attachment) => attachment.isExcel);
-
-        const message: MailMessage = {
-          id: String(item.uid ?? `${uid}`),
-          subject: item.envelope?.subject ?? "(件名なし)",
-          senderName: from?.name ?? "",
-          senderAddress: from?.address ?? "",
-          receivedAt: toIsoString(item.internalDate),
-          body,
-          preview: toPreview(body),
-          hasAttachments: attachments.length > 0,
-          attachments,
-          hasExcelAttachment
-        };
-
-        if (shouldIncludeMessage(message, keywords)) {
-          messagesById.set(message.id, message);
+      if (source.length > 0) {
+        try {
+          parsed = await simpleParser(source);
+        } catch {
+          parsed = null;
         }
       }
+
+      const from = item.envelope?.from?.[0];
+      const body = (parsed?.text || parsed?.html?.toString() || "").replace(/\s+/g, " ").trim();
+      const attachments = (parsed?.attachments ?? []).map((attachment) => {
+        const filename = attachment.filename ?? "(名称なし)";
+        const contentType = attachment.contentType ?? "application/octet-stream";
+        const contentBase64 = Buffer.isBuffer(attachment.content)
+          ? attachment.content.toString("base64")
+          : undefined;
+        return {
+          filename,
+          size: attachment.size ?? 0,
+          contentType,
+          isExcel: isExcelAttachment(filename, contentType),
+          contentBase64
+        };
+      });
+      const hasExcelAttachment = attachments.some((attachment) => attachment.isExcel);
+
+      const message: MailMessage = {
+        id: String(item.uid ?? `${uid}`),
+        subject: item.envelope?.subject ?? "(件名なし)",
+        senderName: from?.name ?? "",
+        senderAddress: from?.address ?? "",
+        receivedAt: toIsoString(item.internalDate),
+        body,
+        preview: toPreview(body),
+        hasAttachments: attachments.length > 0,
+        attachments,
+        hasExcelAttachment
+      };
+
+      return message;
     };
 
     for (let index = 0; index < uids.length; index += FETCH_UID_CHUNK_SIZE) {
       const uidChunk = uids.slice(index, index + FETCH_UID_CHUNK_SIZE);
 
-      try {
-        await readMessagesFromUids(uidChunk);
-      } catch {
-        for (const uid of uidChunk) {
-          try {
-            await readMessagesFromUids([uid]);
-          } catch {}
+      const results = await Promise.allSettled(uidChunk.map((uid) => readSingleMessage(uid)));
+
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value) {
+          if (shouldIncludeMessage(result.value, keywords)) {
+            messagesById.set(result.value.id, result.value);
+          }
         }
       }
     }

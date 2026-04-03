@@ -903,3 +903,78 @@
     font-size: 24px;
   }
 }
+
+/* Excel Preview Modal */
+.excelModalCard {
+  width: min(960px, 95vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.excelTabList {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  background: #f8fafc;
+}
+
+.excelTab {
+  padding: 6px 12px;
+  border-radius: 6px 6px 0 0;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  transition: all 0.2s ease;
+}
+
+.excelTab:hover {
+  background: #f1f5f9;
+}
+
+.excelTabActive {
+  background: #ffffff;
+  border-bottom: 1px solid #ffffff;
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.excelTableWrap {
+  overflow: auto;
+  max-height: 60vh;
+  padding: 8px;
+  flex: 1;
+}
+
+.excelTable {
+  border-collapse: collapse;
+  font-size: 12px;
+  min-width: 100%;
+  background: #ffffff;
+}
+
+.excelTable th,
+.excelTable td {
+  border: 1px solid #e2e8f0;
+  padding: 4px 8px;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.excelTable thead th {
+  background: #f8fafc;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  color: var(--muted);
+}
+
+.excelTable tbody tr:hover {
+  background: #f8fbff;
+}

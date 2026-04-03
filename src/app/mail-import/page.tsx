@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 import styles from "../dashboard/dashboard.module.css";
 import {
   getManagedCases,
@@ -35,6 +36,12 @@ type CaseStatus = "pending" | "managed";
 
 type CaseRow = (PendingCase | ManagedCase) & {
   status: CaseStatus;
+};
+
+type ExcelPreview = {
+  filename: string;
+  sheets: { name: string; data: string[][] }[];
+  activeSheet: number;
 };
 
 const DAYS_TO_FETCH = 5;
@@ -80,6 +87,30 @@ const formatSender = (senderName?: string, senderAddress?: string) => {
 };
 
 const isExchangeRequest = (item: PendingCase | ManagedCase) => /(交換|差し替え|replacement)/i.test(item.subject);
+
+const openExcelPreview = (file: { filename: string; contentBase64?: string }): ExcelPreview | null => {
+  if (!file.contentBase64) {
+    return null;
+  }
+
+  try {
+    const binary = atob(file.contentBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    const workbook = XLSX.read(bytes, { type: "array" });
+    const sheets = workbook.SheetNames.map((name) => ({
+      name,
+      data: XLSX.utils.sheet_to_json<string[]>(workbook.Sheets[name], { header: 1, defval: "" })
+    }));
+
+    return { filename: file.filename, sheets, activeSheet: 0 };
+  } catch {
+    return null;
+  }
+};
 
 const downloadAttachment = (file: { filename: string; contentType: string; contentBase64?: string }) => {
   if (!file.contentBase64 || typeof window === "undefined") {
@@ -137,6 +168,7 @@ export default function MailImportPage() {
   const [isUnprocessedOnly, setIsUnprocessedOnly] = useState(true);
   const [searchText, setSearchText] = useState("");
   const [selectedCase, setSelectedCase] = useState<CaseRow | null>(null);
+  const [excelPreview, setExcelPreview] = useState<ExcelPreview | null>(null);
 
   const today = useMemo(() => new Date(), []);
 
@@ -502,37 +534,47 @@ export default function MailImportPage() {
                 </p>
               </div>
 
-              {isExchangeRequest(selectedCase) ? (
+              {selectedCase.attachments?.filter((file) => file.isExcel).length ? (
                 <section className={styles.attachmentSection}>
-                  <h4>交換依頼のExcel添付</h4>
-                  {selectedCase.attachments?.filter((file) => file.isExcel).length ? (
-                    <ul>
-                      {selectedCase.attachments
-                        ?.filter((file) => file.isExcel)
-                        .map((file) => (
-                          <li key={`${selectedCase.id}-${file.filename}`}>
-                            <span>{file.filename}</span>
-                            <span className={styles.attachmentActions}>
-                              <span>{formatSize(file.size)}</span>
-                              <button
-                                className={styles.attachmentButton}
-                                type="button"
-                                onClick={() => {
-                                  const isDownloaded = downloadAttachment(file);
-                                  if (!isDownloaded) {
-                                    setMailError("このExcel添付は読み込みデータが不足しているため開けません。メール再取得を実行してください。");
-                                  }
-                                }}
-                              >
-                                Excelを開く
-                              </button>
-                            </span>
-                          </li>
-                        ))}
-                    </ul>
-                  ) : (
-                    <p>Excel添付が見つかりません。</p>
-                  )}
+                  <h4>{isExchangeRequest(selectedCase) ? "交換依頼のExcel添付" : "Excel添付"}</h4>
+                  <ul>
+                    {selectedCase.attachments
+                      ?.filter((file) => file.isExcel)
+                      .map((file) => (
+                        <li key={`${selectedCase.id}-${file.filename}`}>
+                          <span>{file.filename}</span>
+                          <span className={styles.attachmentActions}>
+                            <span>{formatSize(file.size)}</span>
+                            <button
+                              className={styles.attachmentButton}
+                              type="button"
+                              onClick={() => {
+                                const preview = openExcelPreview(file);
+                                if (!preview) {
+                                  setMailError("このExcel添付は読み込みデータが不足しているため開けません。メール再取得を実行してください。");
+                                } else {
+                                  setExcelPreview(preview);
+                                }
+                              }}
+                            >
+                              プレビュー
+                            </button>
+                            <button
+                              className={styles.attachmentButton}
+                              type="button"
+                              onClick={() => {
+                                const isDownloaded = downloadAttachment(file);
+                                if (!isDownloaded) {
+                                  setMailError("このExcel添付は読み込みデータが不足しているため開けません。メール再取得を実行してください。");
+                                }
+                              }}
+                            >
+                              ダウンロード
+                            </button>
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
                 </section>
               ) : null}
 
@@ -540,6 +582,55 @@ export default function MailImportPage() {
                 <h4>本文</h4>
                 <pre className={styles.mailBody}>{selectedCase.body || "本文なし"}</pre>
               </section>
+            </div>
+          </div>
+        ) : null}
+
+        {excelPreview ? (
+          <div className={styles.modalOverlay} onClick={() => setExcelPreview(null)}>
+            <div className={`${styles.modalCard} ${styles.excelModalCard}`} onClick={(event) => event.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3>{excelPreview.filename}</h3>
+                <button className={styles.modalClose} type="button" onClick={() => setExcelPreview(null)}>
+                  ×
+                </button>
+              </div>
+
+              {excelPreview.sheets.length > 1 ? (
+                <div className={styles.excelTabList}>
+                  {excelPreview.sheets.map((sheet, index) => (
+                    <button
+                      key={`${sheet.name}-${index}`}
+                      className={`${styles.excelTab} ${excelPreview.activeSheet === index ? styles.excelTabActive : ""}`}
+                      type="button"
+                      onClick={() => setExcelPreview({ ...excelPreview, activeSheet: index })}
+                    >
+                      {sheet.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className={styles.excelTableWrap}>
+                <table className={styles.excelTable}>
+                  <thead>
+                    <tr>
+                      {excelPreview.sheets[excelPreview.activeSheet]?.data[0]?.map((header, idx) => (
+                        <th key={`header-${idx}`}>{header}</th>
+                      )) || null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {excelPreview.sheets[excelPreview.activeSheet]?.data.slice(1).map((row, rowIdx) => (
+                      <tr key={`row-${rowIdx}`}>
+                        {row.map((cell, cellIdx) => (
+                          <td key={`cell-${rowIdx}-${cellIdx}`}>{cell}</td>
+                        ))}
+                      </tr>
+                    )) || null}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         ) : null}
