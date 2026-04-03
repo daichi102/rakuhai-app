@@ -135,6 +135,52 @@ const openExcelPreview = (file: { filename: string; contentBase64?: string }): E
   }
 };
 
+const extractAizaInfoFromBase64 = (contentBase64: string): AizaInfo | undefined => {
+  if (!contentBase64) {
+    return undefined;
+  }
+
+  try {
+    const binary = atob(contentBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    const workbook = XLSX.read(bytes, { type: "array" });
+    const sheet = workbook.Sheets["アイザ"];
+    if (!sheet) {
+      return undefined;
+    }
+
+    const data = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" });
+
+    return {
+      orderName: String(data[8]?.[8] ?? "").trim() || undefined,
+      orderPhone: String(data[9]?.[8] ?? "").trim() || undefined,
+      orderAddress: String(data[10]?.[8] ?? "").trim() || undefined,
+      customerKana: String(data[13]?.[8] ?? "").trim() || undefined,
+      customerName: String(data[14]?.[8] ?? "").trim() || undefined,
+      customerAddress: String(data[15]?.[8] ?? "").trim() || undefined,
+      customerPhone: String(data[16]?.[8] ?? "").trim() || undefined,
+      productName: String(data[19]?.[2] ?? "").trim() || undefined,
+      productCode: String(data[19]?.[8] ?? "").trim() || undefined,
+      productColor: String(data[19]?.[18] ?? "").trim() || undefined,
+      productQty: data[19]?.[21] ? Number(data[19]?.[21]) : undefined,
+      inquiryNo: String(data[25]?.[9] ?? "").trim() || undefined,
+      visitDate: String(data[26]?.[9] ?? "").trim() || undefined,
+      hasAttendant: String(data[28]?.[9] ?? "").trim() || undefined,
+      existingRemoval: String(data[30]?.[9] ?? "").trim() || undefined,
+      warranty: String(data[32]?.[9] ?? "").trim() || undefined,
+      notes: String(data[34]?.[9] ?? "").trim() || undefined,
+      staff: String(data[37]?.[9] ?? "").trim() || undefined,
+      caution: String(data[39]?.[1] ?? "").trim() || undefined
+    };
+  } catch {
+    return undefined;
+  }
+};
+
 const downloadAttachment = (file: { filename: string; contentType: string; contentBase64?: string }) => {
   if (!file.contentBase64 || typeof window === "undefined") {
     return false;
@@ -387,6 +433,38 @@ export default function MailImportPage() {
     }
   };
 
+  const handleSelectCase = (item: CaseRow) => {
+    // アイザ情報がなければ、Excelから自動抽出
+    if (!item.aizaInfo && item.attachments?.length) {
+      const excelFile = item.attachments.find((a) => a.isExcel && a.contentBase64);
+      if (excelFile && excelFile.contentBase64) {
+        const extractedAiza = extractAizaInfoFromBase64(excelFile.contentBase64);
+        if (extractedAiza) {
+          const updatedCase: CaseRow = {
+            ...item,
+            aizaInfo: extractedAiza
+          };
+
+          // localStorageも更新
+          if (item.status === "pending") {
+            const pending = getPendingCases();
+            const updated = pending.map((c) => (c.id === item.id ? { ...c, aizaInfo: extractedAiza } : c));
+            savePendingCases(updated);
+          } else {
+            const managed = getManagedCases();
+            const updated = managed.map((c) => (c.id === item.id ? { ...c, aizaInfo: extractedAiza } : c));
+            saveManagedCases(updated);
+          }
+
+          setSelectedCase(updatedCase);
+          return;
+        }
+      }
+    }
+
+    setSelectedCase(item);
+  };
+
   return (
     <main className={`${styles.page} ${isSidebarCollapsed ? styles.pageCollapsed : ""}`}>
       <aside className={styles.sidebar}>
@@ -500,7 +578,7 @@ export default function MailImportPage() {
                 </thead>
                 <tbody>
                   {filteredRows.map((item) => (
-                    <tr key={`${item.status}-${item.id}`} onClick={() => setSelectedCase(item)}>
+                    <tr key={`${item.status}-${item.id}`} onClick={() => handleSelectCase(item)}>
                       <td>
                         <span className={item.status === "pending" ? styles.statusPending : styles.statusManaged}>
                           {item.status === "pending" ? "未処理" : "処理済"}
