@@ -68,7 +68,9 @@ export type CompletionReport = {
 
 export type ManagedCase = PendingCase & {
   transferredAt: string;
+  status?: "pending" | "confirmed";
   workCheck?: WorkCheck;
+  workCheckFull?: any; // WorkCheckFull from workCheckSchema
   completionReport?: CompletionReport;
 };
 

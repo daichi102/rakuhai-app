@@ -6,3 +6,5 @@ out/
 .firebase/
 .vercel/
 coverage/
+
+.vercel
