@@ -1,4 +1,4 @@
-import { WorkCheckItem } from "@/lib/caseStore";
+import { WorkCheckItem, WorkCheckFull, AizaInfo } from "@/lib/caseStore";
 
 export const defaultWorkCheckItems: WorkCheckItem[] = [
   // 設置商品
@@ -51,3 +51,10 @@ export const calculateWorkCheckTotal = (items: WorkCheckItem[]): { subtotalInsta
     total: subtotalInstall + subtotalParts + subtotalExtra
   };
 };
+
+export const defaultWorkCheckFull = (aizaInfo?: AizaInfo): WorkCheckFull => ({
+  inquiryNo: aizaInfo?.inquiryNo,
+  productCode: aizaInfo?.productCode,
+  customerName: aizaInfo?.customerName,
+  optionWorks: []
+});

@@ -60,6 +60,44 @@ export type WorkCheck = {
   completedAt?: string;
 };
 
+export type WorkCheckFull = {
+  inquiryNo?: string;
+  worker?: string;
+  store?: string;
+  productCode?: string;
+  serialNo?: string;
+
+  unboxWithCustomer?: boolean;
+  checkScratchOnUnbox?: boolean;
+  checkRouteBeforeCarryIn?: string;
+  checkScratchAroundInstall?: boolean;
+
+  customerConfirm?: boolean;
+  operationCheck?: boolean;
+  checkScratchAfterInstall?: boolean;
+  checkRouteAfterCarryIn?: string;
+  cleaning?: boolean;
+  explanation?: boolean;
+
+  elevator?: "無" | "有";
+  floorNo?: string;
+  stairs?: "屋内" | "屋外" | "なし";
+  warranty?: boolean;
+  takeBack?: boolean;
+  carryOut?: "無" | "有";
+  productCategory?: string;
+  optionWorks?: string[];
+  remarks?: string;
+
+  installDate?: string;
+  installTimeStart?: string;
+  installTimeEnd?: string;
+  partnerCompany?: string;
+  customerName?: string;
+  signatureDataUrl?: string;
+  signedAt?: string;
+};
+
 export type CompletionReport = {
   pdfStoragePath: string;
   qrCodeUrl: string;

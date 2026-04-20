@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import SignatureCanvas from "react-signature-canvas";
 import styles from "../dashboard/dashboard.module.css";
-import { getManagedCases, type ManagedCase, type WorkCheck, type AizaInfo } from "@/lib/caseStore";
-import { defaultWorkCheckItems, calculateWorkCheckTotal } from "@/lib/workCheckDefaults";
+import { getManagedCases, type ManagedCase, type WorkCheck, type WorkCheckFull, type AizaInfo } from "@/lib/caseStore";
+import { defaultWorkCheckItems, calculateWorkCheckTotal, defaultWorkCheckFull } from "@/lib/workCheckDefaults";
 
 const menuItems = [
   { label: "ダッシュボード", path: "/dashboard" },
@@ -127,23 +127,26 @@ function DetailsTab({ caseData }: { caseData: ManagedCase }) {
   );
 }
 
-function WorkCheckTab({ caseData, workCheckState, setWorkCheckState }: { caseData: ManagedCase; workCheckState: WorkCheck; setWorkCheckState: (state: WorkCheck) => void }) {
+function WorkCheckTab({ caseData }: { caseData: ManagedCase }) {
+  const [workCheck, setWorkCheck] = useState<WorkCheckFull>(caseData.workCheckFull || defaultWorkCheckFull(caseData.aizaInfo));
   const sigCanvasRef = useRef<any>(null);
 
-  const handleItemCheck = (itemId: string, checked: boolean) => {
-    const updatedItems = workCheckState.items.map((item) =>
-      item.id === itemId ? { ...item, checked } : item
-    );
-    const { subtotalInstall, subtotalParts, subtotalExtra, total } = calculateWorkCheckTotal(updatedItems);
-    setWorkCheckState({ ...workCheckState, items: updatedItems, subtotalInstall, subtotalParts, subtotalExtra, total });
+  const handleFieldChange = (field: keyof WorkCheckFull, value: any) => {
+    setWorkCheck((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleQtyChange = (itemId: string, qty: number) => {
-    const updatedItems = workCheckState.items.map((item) =>
-      item.id === itemId ? { ...item, qty } : item
-    );
-    const { subtotalInstall, subtotalParts, subtotalExtra, total } = calculateWorkCheckTotal(updatedItems);
-    setWorkCheckState({ ...workCheckState, items: updatedItems, subtotalInstall, subtotalParts, subtotalExtra, total });
+  const handleCheckChange = (field: keyof WorkCheckFull, checked: boolean) => {
+    setWorkCheck((prev) => ({ ...prev, [field]: checked }));
+  };
+
+  const handleOptionWorkToggle = (work: string) => {
+    setWorkCheck((prev) => {
+      const optionWorks = prev.optionWorks || [];
+      if (optionWorks.includes(work)) {
+        return { ...prev, optionWorks: optionWorks.filter((w) => w !== work) };
+      }
+      return { ...prev, optionWorks: [...optionWorks, work] };
+    });
   };
 
   const clearSignature = () => {
@@ -153,111 +156,253 @@ function WorkCheckTab({ caseData, workCheckState, setWorkCheckState }: { caseDat
   const saveSignature = () => {
     const sig = sigCanvasRef.current?.toDataURL("image/png");
     if (sig) {
-      setWorkCheckState({ ...workCheckState, signatureDataUrl: sig, signedAt: new Date().toISOString() });
+      handleFieldChange("signatureDataUrl", sig);
+      handleFieldChange("signedAt", new Date().toISOString());
     }
   };
 
+  const inputStyle = { padding: "8px", border: "1px solid #ddd", borderRadius: "4px", width: "100%" };
+  const labelStyle = { display: "block", fontSize: "12px", color: "#666", marginBottom: "4px" };
+
   return (
     <div className={styles.tabContent}>
-      <h3 style={{ marginBottom: "16px" }}>工事内容チェックリスト</h3>
+      <h3 style={{ marginBottom: "20px" }}>作業チェック表</h3>
 
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "20px" }}>
-        <thead>
-          <tr style={{ borderBottom: "2px solid #ddd" }}>
-            <th style={{ padding: "8px", textAlign: "left" }}>チェック</th>
-            <th style={{ padding: "8px", textAlign: "left" }}>内容</th>
-            <th style={{ padding: "8px", textAlign: "center", width: "60px" }}>数量</th>
-            <th style={{ padding: "8px", textAlign: "right", width: "100px" }}>単価</th>
-            <th style={{ padding: "8px", textAlign: "right", width: "100px" }}>金額</th>
-          </tr>
-        </thead>
-        <tbody>
-          {workCheckState.items.map((item) => {
-            const amount = (item.checked ? (item.qty || 0) * (item.unitPrice || 0) : 0).toLocaleString("ja-JP");
-            return (
-              <tr key={item.id} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: "8px", textAlign: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={item.checked}
-                    onChange={(e) => handleItemCheck(item.id, e.target.checked)}
-                  />
-                </td>
-                <td style={{ padding: "8px" }}>{item.label}</td>
-                <td style={{ padding: "8px", textAlign: "center" }}>
-                  {item.unitPrice ? (
-                    <input
-                      type="number"
-                      value={item.qty || 0}
-                      onChange={(e) => handleQtyChange(item.id, Math.max(0, Number(e.target.value)))}
-                      style={{ width: "50px", padding: "4px" }}
-                    />
-                  ) : (
-                    "-"
-                  )}
-                </td>
-                <td style={{ padding: "8px", textAlign: "right" }}>
-                  {item.unitPrice ? `¥${item.unitPrice.toLocaleString("ja-JP")}` : "-"}
-                </td>
-                <td style={{ padding: "8px", textAlign: "right" }}>¥{amount}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-
-      <div style={{ backgroundColor: "#f5f5f5", padding: "12px", borderRadius: "4px", marginBottom: "20px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+      {/* 5-1 基本情報 */}
+      <section style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "1px solid #ddd" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>5-1 基本情報</h4>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
           <div>
-            <p style={{ fontSize: "12px", color: "#666", margin: "0 0 4px 0" }}>設置商品小計</p>
-            <p style={{ margin: 0, fontSize: "16px", fontWeight: "bold" }}>¥{workCheckState.subtotalInstall.toLocaleString("ja-JP")}</p>
+            <label style={labelStyle}>
+              問い合わせ番号 <span style={{ color: "red" }}>※</span>
+            </label>
+            <input type="text" value={workCheck.inquiryNo || ""} onChange={(e) => handleFieldChange("inquiryNo", e.target.value)} style={inputStyle} />
           </div>
           <div>
-            <p style={{ fontSize: "12px", color: "#666", margin: "0 0 4px 0" }}>部材・料金小計</p>
-            <p style={{ margin: 0, fontSize: "16px", fontWeight: "bold" }}>¥{workCheckState.subtotalParts.toLocaleString("ja-JP")}</p>
+            <label style={labelStyle}>
+              作業担当者 <span style={{ color: "red" }}>※</span>
+            </label>
+            <input type="text" value={workCheck.worker || ""} onChange={(e) => handleFieldChange("worker", e.target.value)} style={inputStyle} />
           </div>
           <div>
-            <p style={{ fontSize: "12px", color: "#666", margin: "0 0 4px 0" }}>別途料金小計</p>
-            <p style={{ margin: 0, fontSize: "16px", fontWeight: "bold" }}>¥{workCheckState.subtotalExtra.toLocaleString("ja-JP")}</p>
+            <label style={labelStyle}>販売店</label>
+            <input type="text" value={workCheck.store || ""} onChange={(e) => handleFieldChange("store", e.target.value)} style={inputStyle} />
           </div>
           <div>
-            <p style={{ fontSize: "12px", color: "#666", margin: "0 0 4px 0" }}>合計金額</p>
-            <p style={{ margin: 0, fontSize: "18px", fontWeight: "bold", color: "#d32f2f" }}>¥{workCheckState.total.toLocaleString("ja-JP")}</p>
+            <label style={labelStyle}>
+              設置商品（品番） <span style={{ color: "red" }}>※</span>
+            </label>
+            <input type="text" value={workCheck.productCode || ""} onChange={(e) => handleFieldChange("productCode", e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelStyle}>製造番号</label>
+            <input type="text" value={workCheck.serialNo || ""} onChange={(e) => handleFieldChange("serialNo", e.target.value)} style={inputStyle} />
           </div>
         </div>
-      </div>
+      </section>
 
-      <hr style={{ margin: "20px 0", border: "none", borderTop: "1px solid #ddd" }} />
-
-      <h3 style={{ marginTop: "20px", marginBottom: "16px" }}>お客様サイン</h3>
-
-      <div style={{ border: "1px solid #ddd", borderRadius: "4px", marginBottom: "12px" }}>
-        <SignatureCanvas
-          ref={sigCanvasRef}
-          canvasProps={{
-            width: 500,
-            height: 150,
-            className: "sigCanvas",
-            style: { border: "1px solid #ddd", borderRadius: "4px", backgroundColor: "#fff" }
-          }}
-        />
-      </div>
-
-      <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-        <button onClick={clearSignature} style={{ padding: "8px 16px", backgroundColor: "#f5f5f5", border: "1px solid #ddd", borderRadius: "4px", cursor: "pointer" }}>
-          クリア
-        </button>
-        <button onClick={saveSignature} style={{ padding: "8px 16px", backgroundColor: "#2196f3", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>
-          サイン保存
-        </button>
-      </div>
-
-      {workCheckState.signatureDataUrl && (
-        <div style={{ marginTop: "12px" }}>
-          <p style={{ fontSize: "12px", color: "#666", margin: "0 0 8px 0" }}>サイン確認</p>
-          <img src={workCheckState.signatureDataUrl} alt="signature" style={{ maxWidth: "200px", border: "1px solid #ddd", borderRadius: "4px" }} />
+      {/* 5-2 商品搬入時チェック */}
+      <section style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "1px solid #ddd" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>
+          5-2 商品搬入時チェック <span style={{ color: "red" }}>※必須</span>
+        </h4>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input type="checkbox" checked={workCheck.unboxWithCustomer || false} onChange={(e) => handleCheckChange("unboxWithCustomer", e.target.checked)} />
+            お客様立会いで開梱
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input type="checkbox" checked={workCheck.checkScratchOnUnbox || false} onChange={(e) => handleCheckChange("checkScratchOnUnbox", e.target.checked)} />
+            開梱時キズ確認
+          </label>
+          <div>
+            <label style={labelStyle}>搬入前ルート確認</label>
+            <select value={workCheck.checkRouteBeforeCarryIn || ""} onChange={(e) => handleFieldChange("checkRouteBeforeCarryIn", e.target.value)} style={inputStyle}>
+              <option value="">-- 選択 --</option>
+              <option value="床">床</option>
+              <option value="壁">壁</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input type="checkbox" checked={workCheck.checkScratchAroundInstall || false} onChange={(e) => handleCheckChange("checkScratchAroundInstall", e.target.checked)} />
+            設置場所周囲キズ確認
+          </label>
         </div>
-      )}
+      </section>
+
+      {/* 5-3 作業終了後チェック */}
+      <section style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "1px solid #ddd" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>
+          5-3 作業終了後チェック <span style={{ color: "red" }}>※必須</span>
+        </h4>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input type="checkbox" checked={workCheck.customerConfirm || false} onChange={(e) => handleCheckChange("customerConfirm", e.target.checked)} />
+            お客様による設置状況確認
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input type="checkbox" checked={workCheck.operationCheck || false} onChange={(e) => handleCheckChange("operationCheck", e.target.checked)} />
+            動作確認（立会い）
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input type="checkbox" checked={workCheck.checkScratchAfterInstall || false} onChange={(e) => handleCheckChange("checkScratchAfterInstall", e.target.checked)} />
+            設置後キズ確認
+          </label>
+          <div>
+            <label style={labelStyle}>搬入後ルート確認</label>
+            <select value={workCheck.checkRouteAfterCarryIn || ""} onChange={(e) => handleFieldChange("checkRouteAfterCarryIn", e.target.value)} style={inputStyle}>
+              <option value="">-- 選択 --</option>
+              <option value="床">床</option>
+              <option value="壁">壁</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input type="checkbox" checked={workCheck.cleaning || false} onChange={(e) => handleCheckChange("cleaning", e.target.checked)} />
+            清掃実施
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input type="checkbox" checked={workCheck.explanation || false} onChange={(e) => handleCheckChange("explanation", e.target.checked)} />
+            取扱説明
+          </label>
+        </div>
+      </section>
+
+      {/* 5-4 搬入/搬出・オプション */}
+      <section style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "1px solid #ddd" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>5-4 搬入/搬出・オプション</h4>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+          <div>
+            <label style={labelStyle}>エレベーター</label>
+            <select value={workCheck.elevator || ""} onChange={(e) => handleFieldChange("elevator", e.target.value)} style={inputStyle}>
+              <option value="">-- 選択 --</option>
+              <option value="無">無</option>
+              <option value="有">有</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>設置階数</label>
+            <input type="text" value={workCheck.floorNo || ""} onChange={(e) => handleFieldChange("floorNo", e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>階段</label>
+            <select value={workCheck.stairs || ""} onChange={(e) => handleFieldChange("stairs", e.target.value)} style={inputStyle}>
+              <option value="">-- 選択 --</option>
+              <option value="屋内">屋内</option>
+              <option value="屋外">屋外</option>
+              <option value="なし">なし</option>
+            </select>
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input type="checkbox" checked={workCheck.warranty || false} onChange={(e) => handleCheckChange("warranty", e.target.checked)} />
+            保証書
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+            <input type="checkbox" checked={workCheck.takeBack || false} onChange={(e) => handleCheckChange("takeBack", e.target.checked)} />
+            持ち帰り
+          </label>
+          <div>
+            <label style={labelStyle}>搬出品</label>
+            <select value={workCheck.carryOut || ""} onChange={(e) => handleFieldChange("carryOut", e.target.value)} style={inputStyle}>
+              <option value="">-- 選択 --</option>
+              <option value="無">無</option>
+              <option value="有">有</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid #eee" }}>
+          <h5 style={{ marginTop: 0, marginBottom: "12px" }}>オプション作業</h5>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            {["ユニック", "ドア・窓・手すり外し", "カウンター越え", "高所作業", "特殊作業", "リサイクル有"].map((work) => (
+              <label key={work} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={(workCheck.optionWorks || []).includes(work)}
+                  onChange={() => handleOptionWorkToggle(work)}
+                />
+                {work}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: "16px" }}>
+          <label style={labelStyle}>変更内容/備考</label>
+          <textarea
+            value={workCheck.remarks || ""}
+            onChange={(e) => handleFieldChange("remarks", e.target.value)}
+            style={{ ...inputStyle, minHeight: "80px", fontFamily: "inherit" }}
+          />
+        </div>
+      </section>
+
+      {/* 5-5 日時・署名 */}
+      <section style={{ marginBottom: "24px" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>5-5 日時・署名</h4>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+          <div>
+            <label style={labelStyle}>
+              設置日 <span style={{ color: "red" }}>※</span>
+            </label>
+            <input type="date" value={workCheck.installDate || ""} onChange={(e) => handleFieldChange("installDate", e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelStyle}>設置時間</label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: "8px", alignItems: "end" }}>
+              <div>
+                <label style={{ ...labelStyle, fontSize: "11px" }}>開始</label>
+                <input type="time" value={workCheck.installTimeStart || ""} onChange={(e) => handleFieldChange("installTimeStart", e.target.value)} style={inputStyle} />
+              </div>
+              <span>～</span>
+              <div>
+                <label style={{ ...labelStyle, fontSize: "11px" }}>終了</label>
+                <input type="time" value={workCheck.installTimeEnd || ""} onChange={(e) => handleFieldChange("installTimeEnd", e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>協力会社</label>
+            <input type="text" value={workCheck.partnerCompany || ""} onChange={(e) => handleFieldChange("partnerCompany", e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>
+              お客様名 <span style={{ color: "red" }}>※</span>
+            </label>
+            <input type="text" value={workCheck.customerName || ""} onChange={(e) => handleFieldChange("customerName", e.target.value)} style={inputStyle} />
+          </div>
+        </div>
+
+        <h4 style={{ marginTop: "20px", marginBottom: "12px" }}>お客様署名</h4>
+        <div style={{ border: "1px solid #ddd", borderRadius: "4px", marginBottom: "12px", backgroundColor: "#fafafa" }}>
+          <SignatureCanvas
+            ref={sigCanvasRef}
+            canvasProps={{
+              width: 500,
+              height: 120,
+              className: "sigCanvas",
+              style: { border: "none", borderRadius: "0px", backgroundColor: "#fff", display: "block", width: "100%" }
+            }}
+          />
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+          <button onClick={clearSignature} style={{ padding: "8px 16px", backgroundColor: "#f5f5f5", border: "1px solid #ddd", borderRadius: "4px", cursor: "pointer" }}>
+            クリア
+          </button>
+          <button onClick={saveSignature} style={{ padding: "8px 16px", backgroundColor: "#2196f3", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>
+            署名を保存
+          </button>
+        </div>
+
+        {workCheck.signatureDataUrl && (
+          <div style={{ marginTop: "12px", padding: "12px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>
+            <p style={{ fontSize: "12px", color: "#666", margin: "0 0 8px 0" }}>署名確認</p>
+            <img src={workCheck.signatureDataUrl} alt="signature" style={{ maxWidth: "200px", border: "1px solid #ddd", borderRadius: "4px" }} />
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -507,7 +652,7 @@ export default function CaseManagementPage() {
 
             <div style={{ padding: "16px" }}>
               {activeTab === "details" && <DetailsTab caseData={selectedCase} />}
-              {activeTab === "workcheck" && <WorkCheckTab caseData={selectedCase} workCheckState={workCheckState} setWorkCheckState={setWorkCheckState} />}
+              {activeTab === "workcheck" && <WorkCheckTab caseData={selectedCase} />}
               {activeTab === "report" && <ReportTab caseData={selectedCase} workCheckState={workCheckState} />}
             </div>
           </div>
