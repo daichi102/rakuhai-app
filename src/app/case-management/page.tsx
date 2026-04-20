@@ -455,28 +455,9 @@ export default function CaseManagementPage() {
           <div style={{ backgroundColor: "white", borderRadius: "8px", width: "90%", maxWidth: "900px", maxHeight: "90vh", overflow: "auto", boxShadow: "0 4px 16px rgba(0, 0, 0, 0.15)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px", borderBottom: "1px solid #eee", position: "sticky", top: 0, backgroundColor: "white" }}>
               <h2 style={{ margin: 0 }}>{selectedCase.subject}</h2>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                <button
-                  onClick={() => {
-                    closeModal();
-                    router.push(`/work-check?caseId=${selectedCase.id}`);
-                  }}
-                  style={{
-                    padding: "8px 16px",
-                    backgroundColor: "#2196f3",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontSize: "14px"
-                  }}
-                >
-                  作業チェック表を編集
-                </button>
-                <button onClick={closeModal} style={{ background: "none", border: "none", fontSize: "24px", cursor: "pointer" }}>
-                  ×
-                </button>
-              </div>
+              <button onClick={closeModal} style={{ background: "none", border: "none", fontSize: "24px", cursor: "pointer" }}>
+                ×
+              </button>
             </div>
 
             <div style={{ display: "flex", borderBottom: "1px solid #eee" }}>

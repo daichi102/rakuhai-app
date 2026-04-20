@@ -570,6 +570,92 @@ function WorkCheckPageContent() {
               </select>
             </div>
 
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>持ち帰り</label>
+              <select
+                value={workCheck.options.carryback}
+                onChange={(e) =>
+                  setWorkCheck({
+                    ...workCheck,
+                    options: { ...workCheck.options, carryback: e.target.value as "持ち帰り" | "持ち帰らない" }
+                  })
+                }
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px"
+                }}
+              >
+                <option value="持ち帰り">持ち帰り</option>
+                <option value="持ち帰らない">持ち帰らない</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>搬出品</label>
+              <select
+                value={workCheck.options.removeExisting}
+                onChange={(e) =>
+                  setWorkCheck({
+                    ...workCheck,
+                    options: { ...workCheck.options, removeExisting: e.target.value as "無" | "有" }
+                  })
+                }
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px"
+                }}
+              >
+                <option value="無">無</option>
+                <option value="有">有</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>冷蔵庫区分</label>
+              <input
+                type="text"
+                value={workCheck.options.refrigeratorType || ""}
+                onChange={(e) =>
+                  setWorkCheck({
+                    ...workCheck,
+                    options: { ...workCheck.options, refrigeratorType: e.target.value }
+                  })
+                }
+                placeholder="任意"
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px"
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>洗濯機区分</label>
+              <input
+                type="text"
+                value={workCheck.options.washingMachineType || ""}
+                onChange={(e) =>
+                  setWorkCheck({
+                    ...workCheck,
+                    options: { ...workCheck.options, washingMachineType: e.target.value }
+                  })
+                }
+                placeholder="任意"
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  border: "1px solid #ddd",
+                  borderRadius: "4px"
+                }}
+              />
+            </div>
+
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={{ display: "block", marginBottom: "8px", fontWeight: "bold" }}>オプション作業</label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
