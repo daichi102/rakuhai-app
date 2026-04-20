@@ -666,7 +666,26 @@ export default function MailImportPage() {
                         </p>
                       </td>
                       <td>{formatDateTime(item.receivedAt)}</td>
-                      <td>
+                      <td style={{ display: "flex", gap: "8px" }}>
+                        <button
+                          className={styles.convertButton}
+                          type="button"
+                          style={{
+                            padding: "6px 12px",
+                            backgroundColor: "#2196f3",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            fontSize: "12px"
+                          }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleSelectCase(item);
+                          }}
+                        >
+                          詳細見る
+                        </button>
                         <button
                           className={styles.convertButton}
                           type="button"

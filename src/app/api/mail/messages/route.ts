@@ -135,26 +135,29 @@ const extractAizaInfo = (contentBase64: string): AizaInfo | undefined => {
     };
 
     const result: AizaInfo = {
-      // 固定セル位置で試す（従来の方法）
-      orderName: extractValue(8, 8) || findValueByLabel("発注元"),
-      orderPhone: extractValue(9, 8) || findValueByLabel("電話"),
-      orderAddress: extractValue(10, 8) || findValueByLabel("住所"),
-      customerKana: extractValue(13, 8) || findValueByLabel("顧客カナ"),
-      customerName: extractValue(14, 8) || findValueByLabel("顧客名"),
-      customerAddress: extractValue(15, 8) || findValueByLabel("お客様住所"),
-      customerPhone: extractValue(16, 8) || findValueByLabel("顧客電話"),
-      productName: extractValue(19, 2) || findValueByLabel("商品名"),
-      productCode: extractValue(19, 8) || findValueByLabel("品番"),
-      productColor: extractValue(19, 18) || findValueByLabel("色"),
-      productQty: extractValue(19, 21) ? Number(extractValue(19, 21)) : undefined,
-      inquiryNo: extractValue(25, 9) || findValueByLabel("問合番号"),
-      visitDate: extractValue(26, 9) || findValueByLabel("訪問日"),
-      hasAttendant: extractValue(28, 9) || findValueByLabel("立会"),
-      existingRemoval: extractValue(30, 9) || findValueByLabel("既設品搬出"),
-      warranty: extractValue(32, 9) || findValueByLabel("保証書"),
-      notes: extractValue(34, 9) || findValueByLabel("特記事項"),
-      staff: extractValue(37, 9) || findValueByLabel("担当者"),
-      caution: extractValue(39, 1) || findValueByLabel("注意事項")
+      // 複数のセル位置パターンを試す（テンプレートのバリエーションに対応）
+      orderName: extractValue(8, 3) || extractValue(8, 4) || extractValue(8, 8) || findValueByLabel("発注元") || findValueByLabel("社名"),
+      orderPhone: extractValue(9, 3) || extractValue(9, 4) || extractValue(9, 8) || extractValue(10, 3) || extractValue(10, 4) || findValueByLabel("電話番号") || findValueByLabel("電話"),
+      orderAddress: extractValue(10, 3) || extractValue(10, 4) || extractValue(10, 8) || extractValue(11, 3) || extractValue(11, 4) || findValueByLabel("住所"),
+
+      customerKana: extractValue(13, 3) || extractValue(13, 4) || extractValue(13, 8) || extractValue(14, 3) || extractValue(14, 4) || findValueByLabel("カナ") || findValueByLabel("お客様カナ"),
+      customerName: extractValue(14, 3) || extractValue(14, 4) || extractValue(14, 8) || extractValue(15, 3) || extractValue(15, 4) || findValueByLabel("名前") || findValueByLabel("お名前") || findValueByLabel("顧客名"),
+      customerAddress: extractValue(15, 3) || extractValue(15, 4) || extractValue(15, 8) || extractValue(16, 3) || extractValue(16, 4) || findValueByLabel("お客様住所") || findValueByLabel("住所"),
+      customerPhone: extractValue(16, 3) || extractValue(16, 4) || extractValue(16, 8) || extractValue(17, 3) || extractValue(17, 4) || findValueByLabel("お客様電話") || findValueByLabel("顧客電話"),
+
+      productName: extractValue(19, 2) || extractValue(19, 3) || extractValue(19, 4) || findValueByLabel("品名") || findValueByLabel("商品名"),
+      productCode: extractValue(19, 7) || extractValue(19, 8) || extractValue(19, 9) || findValueByLabel("品番") || findValueByLabel("製造番号"),
+      productColor: extractValue(19, 10) || extractValue(19, 11) || extractValue(19, 12) || findValueByLabel("色"),
+      productQty: (extractValue(19, 13) || extractValue(19, 14) ? Number(extractValue(19, 13) || extractValue(19, 14)) : undefined) || (extractValue(19, 20) ? Number(extractValue(19, 20)) : undefined),
+
+      inquiryNo: extractValue(25, 8) || extractValue(25, 9) || findValueByLabel("問合番号") || findValueByLabel("お客様ID"),
+      visitDate: extractValue(26, 8) || extractValue(26, 9) || extractValue(27, 8) || extractValue(27, 9) || findValueByLabel("訪問日") || findValueByLabel("設置訪問日"),
+      hasAttendant: extractValue(28, 8) || extractValue(28, 9) || findValueByLabel("立会") || findValueByLabel("店舗立会"),
+      existingRemoval: extractValue(30, 8) || extractValue(30, 9) || extractValue(31, 8) || extractValue(31, 9) || findValueByLabel("既設品搬出"),
+      warranty: extractValue(32, 8) || extractValue(32, 9) || extractValue(33, 8) || extractValue(33, 9) || findValueByLabel("保証書"),
+      notes: extractValue(34, 8) || extractValue(34, 9) || extractValue(35, 8) || extractValue(35, 9) || findValueByLabel("特記事項"),
+      staff: extractValue(37, 8) || extractValue(37, 9) || extractValue(38, 8) || extractValue(38, 9) || findValueByLabel("担当者"),
+      caution: extractValue(39, 1) || extractValue(39, 2) || extractValue(40, 1) || extractValue(40, 2) || findValueByLabel("注意事項")
     };
 
     if (Object.values(result).some((v) => v !== undefined)) {
