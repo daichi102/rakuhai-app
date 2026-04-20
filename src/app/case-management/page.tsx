@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import SignatureCanvas from "react-signature-canvas";
 import styles from "../dashboard/dashboard.module.css";
-import { getManagedCases, type ManagedCase, type WorkCheck, type WorkCheckFull, type AizaInfo } from "@/lib/caseStore";
+import { getManagedCases, saveManagedCases, type ManagedCase, type WorkCheck, type WorkCheckFull, type CompletionReportForm, type CompletionReportRow, type AizaInfo } from "@/lib/caseStore";
 import { defaultWorkCheckItems, calculateWorkCheckTotal, defaultWorkCheckFull } from "@/lib/workCheckDefaults";
 
 const menuItems = [
@@ -407,88 +407,307 @@ function WorkCheckTab({ caseData }: { caseData: ManagedCase }) {
   );
 }
 
-function ReportTab({ caseData, workCheckState }: { caseData: ManagedCase; workCheckState: WorkCheck }) {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState("");
-
-  const generatePDF = async () => {
-    setIsGenerating(true);
-    setError("");
-
-    try {
-      const response = await fetch("/api/pdf/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          caseId: caseData.id,
-          aizaInfo: caseData.aizaInfo,
-          workCheck: workCheckState
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "PDF生成に失敗しました");
-      }
-
-      if (data.pdfUrl) {
-        const link = document.createElement("a");
-        link.href = data.pdfUrl;
-        link.download = `completion-report-${caseData.id}.pdf`;
-        link.click();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "PDF生成に失敗しました");
-      console.error("PDF生成エラー:", err);
-    } finally {
-      setIsGenerating(false);
+function ReportTab({ caseData }: { caseData: ManagedCase }) {
+  const [form, setForm] = useState<CompletionReportForm>(
+    caseData.completionReportForm || {
+      completionDate: caseData.workCheckFull?.installDate,
+      issueDate: caseData.workCheckFull?.installDate,
+      productRows: [],
+      materialRows: [],
+      extraRows: []
     }
+  );
+
+  const handleFieldChange = (field: keyof CompletionReportForm, value: any) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  const handleRowChange = (section: "productRows" | "materialRows" | "extraRows", id: string, field: string, value: any) => {
+    setForm((prev) => ({
+      ...prev,
+      [section]: prev[section].map((row) => (row.id === id ? { ...row, [field]: value, amount: field === "unitPrice" || field === "qty" ? (row.qty || 0) * (field === "unitPrice" ? value : row.unitPrice || 0) : row.amount } : row))
+    }));
+  };
+
+  const addRow = (section: "productRows" | "materialRows" | "extraRows") => {
+    const newRow: CompletionReportRow = { id: Date.now().toString(), content: "", qty: 1, unitPrice: 0, amount: 0 };
+    setForm((prev) => ({ ...prev, [section]: [...prev[section], newRow] }));
+  };
+
+  const removeRow = (section: "productRows" | "materialRows" | "extraRows", id: string) => {
+    setForm((prev) => ({ ...prev, [section]: prev[section].filter((row) => row.id !== id) }));
+  };
+
+  const calculateDistanceCharge = (): number => {
+    const distance = form.roundTripDistance || 0;
+    return Math.max(0, (distance - 40) * 80);
+  };
+
+  const getSubtotal = (rows: CompletionReportRow[]): number => rows.reduce((sum, row) => sum + (row.amount || 0), 0);
+
+  const productSubtotal = getSubtotal(form.productRows);
+  const materialSubtotal = getSubtotal(form.materialRows);
+  const extraSubtotal = getSubtotal(form.extraRows);
+  const distanceCharge = calculateDistanceCharge();
+  const total = productSubtotal + materialSubtotal + extraSubtotal + (form.parkingFee || 0) + distanceCharge + (form.highwayCost || 0);
+
+  const saveForm = () => {
+    const managed = getManagedCases();
+    const updated = managed.map((c) => (c.id === caseData.id ? { ...c, completionReportForm: form } : c));
+    saveManagedCases(updated);
+  };
+
+  const inputStyle = { padding: "8px", border: "1px solid #ddd", borderRadius: "4px", width: "100%" };
+  const labelStyle = { display: "block", fontSize: "12px", color: "#666", marginBottom: "4px" };
 
   return (
     <div className={styles.tabContent}>
-      <h3 style={{ marginBottom: "16px" }}>作業完了書</h3>
+      <h3 style={{ marginBottom: "20px" }}>設置完了報告書</h3>
 
-      {error && <div style={{ padding: "12px", backgroundColor: "#ffebee", color: "#c62828", borderRadius: "4px", marginBottom: "16px" }}>{error}</div>}
-
-      {caseData.completionReport ? (
-        <>
-          <p style={{ fontSize: "14px", color: "#666" }}>生成日時: {formatDateTime(caseData.completionReport.generatedAt)}</p>
-
-          <div style={{ marginTop: "16px", padding: "12px", backgroundColor: "#f5f5f5", borderRadius: "4px", textAlign: "center" }}>
-            <p style={{ margin: "0 0 12px 0" }}>QRコード</p>
-            {/* TODO: QRコード表示 */}
-            <div style={{ width: "150px", height: "150px", margin: "0 auto", backgroundColor: "#fff", border: "1px solid #ddd", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              QRコード
-            </div>
+      {/* 7-1 ヘッダー */}
+      <section style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "1px solid #ddd" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>7-1 ヘッダー</h4>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px", fontSize: "13px" }}>
+          <div>
+            <label style={labelStyle}>依頼受付NO</label>
+            <div style={{ padding: "8px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>{caseData.aizaInfo?.inquiryNo || "-"}</div>
           </div>
-
-          <div style={{ marginTop: "16px" }}>
-            <a href={caseData.completionReport.pdfStoragePath} download style={{ display: "inline-block", padding: "8px 16px", backgroundColor: "#4caf50", color: "white", textDecoration: "none", borderRadius: "4px", cursor: "pointer" }}>
-              PDFをダウンロード
-            </a>
+          <div>
+            <label style={labelStyle}>協力会社名</label>
+            <div style={{ padding: "8px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>株式会社アイザ</div>
           </div>
-        </>
-      ) : (
-        <>
-          <p style={{ color: "#666", marginBottom: "16px" }}>作業チェック表を完了した後、生成できます。</p>
-          <button
-            onClick={generatePDF}
-            disabled={isGenerating}
-            style={{
-              padding: "8px 16px",
-              backgroundColor: isGenerating ? "#ccc" : "#2196f3",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: isGenerating ? "not-allowed" : "pointer"
-            }}
-          >
-            {isGenerating ? "生成中..." : "作業完了書を生成する"}
-          </button>
-        </>
-      )}
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelStyle}>協力会社住所</label>
+            <div style={{ padding: "8px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>東京都板橋区上板橋2-2-6</div>
+          </div>
+          <div>
+            <label style={labelStyle}>TEL</label>
+            <div style={{ padding: "8px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>03-5921-3005</div>
+          </div>
+          <div>
+            <label style={labelStyle}>FAX</label>
+            <div style={{ padding: "8px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>03-3937-0683</div>
+          </div>
+          <div>
+            <label style={labelStyle}>発行部署名</label>
+            <input type="text" value={form.issuerName || ""} onChange={(e) => handleFieldChange("issuerName", e.target.value)} placeholder="東京 株式会社アイザ + 名前" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>設置完了日</label>
+            <div style={{ padding: "8px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>{form.completionDate || "-"}</div>
+          </div>
+          <div>
+            <label style={labelStyle}>完了報告書発行日</label>
+            <input type="date" value={form.issueDate || ""} onChange={(e) => handleFieldChange("issueDate", e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelStyle}>設置先お客様</label>
+            <div style={{ padding: "8px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>{caseData.aizaInfo?.customerName || "-"}</div>
+          </div>
+          <div>
+            <label style={labelStyle}>依頼元店名</label>
+            <input type="text" value={form.stName || ""} onChange={(e) => handleFieldChange("stName", e.target.value)} placeholder="ハイアールジャパンセールス + ST" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>依頼元販社</label>
+            <input type="text" value={form.salesCompany || ""} onChange={(e) => handleFieldChange("salesCompany", e.target.value)} style={inputStyle} />
+          </div>
+        </div>
+      </section>
+
+      {/* 7-2 設置商品 */}
+      <section style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "1px solid #ddd" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>7-2 設置商品</h4>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "12px", fontSize: "13px" }}>
+          <thead>
+            <tr style={{ borderBottom: "2px solid #ddd" }}>
+              <th style={{ padding: "8px", textAlign: "left" }}>商品名・内容</th>
+              <th style={{ padding: "8px", textAlign: "center", width: "80px" }}>品番</th>
+              <th style={{ padding: "8px", textAlign: "center", width: "60px" }}>数量</th>
+              <th style={{ padding: "8px", textAlign: "right", width: "80px" }}>単価</th>
+              <th style={{ padding: "8px", textAlign: "right", width: "80px" }}>金額</th>
+              <th style={{ padding: "8px", textAlign: "left", flex: 1 }}>備考</th>
+              <th style={{ padding: "8px", textAlign: "center", width: "40px" }}>削除</th>
+            </tr>
+          </thead>
+          <tbody>
+            {form.productRows.map((row) => (
+              <tr key={row.id} style={{ borderBottom: "1px solid #eee" }}>
+                <td style={{ padding: "8px" }}>
+                  <input type="text" value={row.content} onChange={(e) => handleRowChange("productRows", row.id, "content", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "center" }}>{caseData.aizaInfo?.productCode || "-"}</td>
+                <td style={{ padding: "8px", textAlign: "center" }}>
+                  <input type="number" value={row.qty} onChange={(e) => handleRowChange("productRows", row.id, "qty", Number(e.target.value))} style={{ ...inputStyle, width: "100%", textAlign: "center" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "right" }}>
+                  <input type="number" value={row.unitPrice} onChange={(e) => handleRowChange("productRows", row.id, "unitPrice", Number(e.target.value))} style={{ ...inputStyle, textAlign: "right" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "right" }}>¥{row.amount.toLocaleString("ja-JP")}</td>
+                <td style={{ padding: "8px" }}>
+                  <input type="text" value={row.note || ""} onChange={(e) => handleRowChange("productRows", row.id, "note", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "center" }}>
+                  <button onClick={() => removeRow("productRows", row.id)} style={{ padding: "4px 8px", backgroundColor: "#f44336", color: "white", border: "none", borderRadius: "3px", cursor: "pointer", fontSize: "12px" }}>
+                    削除
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button onClick={() => addRow("productRows")} style={{ padding: "8px 16px", backgroundColor: "#2196f3", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}>
+          + 行を追加
+        </button>
+        <div style={{ marginTop: "12px", textAlign: "right", fontWeight: "bold" }}>小計: ¥{productSubtotal.toLocaleString("ja-JP")}</div>
+      </section>
+
+      {/* 7-3 仕様部材 */}
+      <section style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "1px solid #ddd" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>7-3 仕様部材</h4>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "12px", fontSize: "13px" }}>
+          <thead>
+            <tr style={{ borderBottom: "2px solid #ddd" }}>
+              <th style={{ padding: "8px", textAlign: "left" }}>明細</th>
+              <th style={{ padding: "8px", textAlign: "center", width: "60px" }}>数量</th>
+              <th style={{ padding: "8px", textAlign: "right", width: "80px" }}>単価</th>
+              <th style={{ padding: "8px", textAlign: "right", width: "80px" }}>金額</th>
+              <th style={{ padding: "8px", textAlign: "left", flex: 1 }}>備考</th>
+              <th style={{ padding: "8px", textAlign: "center", width: "40px" }}>削除</th>
+            </tr>
+          </thead>
+          <tbody>
+            {form.materialRows.map((row) => (
+              <tr key={row.id} style={{ borderBottom: "1px solid #eee" }}>
+                <td style={{ padding: "8px" }}>
+                  <input type="text" value={row.content} onChange={(e) => handleRowChange("materialRows", row.id, "content", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "center" }}>
+                  <input type="number" value={row.qty} onChange={(e) => handleRowChange("materialRows", row.id, "qty", Number(e.target.value))} style={{ ...inputStyle, width: "100%", textAlign: "center" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "right" }}>
+                  <input type="number" value={row.unitPrice} onChange={(e) => handleRowChange("materialRows", row.id, "unitPrice", Number(e.target.value))} style={{ ...inputStyle, textAlign: "right" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "right" }}>¥{row.amount.toLocaleString("ja-JP")}</td>
+                <td style={{ padding: "8px" }}>
+                  <input type="text" value={row.note || ""} onChange={(e) => handleRowChange("materialRows", row.id, "note", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "center" }}>
+                  <button onClick={() => removeRow("materialRows", row.id)} style={{ padding: "4px 8px", backgroundColor: "#f44336", color: "white", border: "none", borderRadius: "3px", cursor: "pointer", fontSize: "12px" }}>
+                    削除
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button onClick={() => addRow("materialRows")} style={{ padding: "8px 16px", backgroundColor: "#2196f3", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}>
+          + 行を追加
+        </button>
+        <div style={{ marginTop: "12px", textAlign: "right", fontWeight: "bold" }}>小計: ¥{materialSubtotal.toLocaleString("ja-JP")}</div>
+      </section>
+
+      {/* 7-4 別途料金 */}
+      <section style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "1px solid #ddd" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>7-4 別途料金</h4>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "12px", fontSize: "13px" }}>
+          <thead>
+            <tr style={{ borderBottom: "2px solid #ddd" }}>
+              <th style={{ padding: "8px", textAlign: "left" }}>作業内容</th>
+              <th style={{ padding: "8px", textAlign: "center", width: "60px" }}>数量</th>
+              <th style={{ padding: "8px", textAlign: "right", width: "80px" }}>単価</th>
+              <th style={{ padding: "8px", textAlign: "right", width: "80px" }}>金額</th>
+              <th style={{ padding: "8px", textAlign: "left", flex: 1 }}>備考</th>
+              <th style={{ padding: "8px", textAlign: "center", width: "40px" }}>削除</th>
+            </tr>
+          </thead>
+          <tbody>
+            {form.extraRows.map((row) => (
+              <tr key={row.id} style={{ borderBottom: "1px solid #eee" }}>
+                <td style={{ padding: "8px" }}>
+                  <input type="text" value={row.content} onChange={(e) => handleRowChange("extraRows", row.id, "content", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "center" }}>
+                  <input type="number" value={row.qty} onChange={(e) => handleRowChange("extraRows", row.id, "qty", Number(e.target.value))} style={{ ...inputStyle, width: "100%", textAlign: "center" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "right" }}>
+                  <input type="number" value={row.unitPrice} onChange={(e) => handleRowChange("extraRows", row.id, "unitPrice", Number(e.target.value))} style={{ ...inputStyle, textAlign: "right" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "right" }}>¥{row.amount.toLocaleString("ja-JP")}</td>
+                <td style={{ padding: "8px" }}>
+                  <input type="text" value={row.note || ""} onChange={(e) => handleRowChange("extraRows", row.id, "note", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                </td>
+                <td style={{ padding: "8px", textAlign: "center" }}>
+                  <button onClick={() => removeRow("extraRows", row.id)} style={{ padding: "4px 8px", backgroundColor: "#f44336", color: "white", border: "none", borderRadius: "3px", cursor: "pointer", fontSize: "12px" }}>
+                    削除
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button onClick={() => addRow("extraRows")} style={{ padding: "8px 16px", backgroundColor: "#2196f3", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "12px" }}>
+          + 行を追加
+        </button>
+        <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", fontSize: "13px" }}>
+          <div>
+            <label style={labelStyle}>駐車料金</label>
+            <input type="number" value={form.parkingFee || 0} onChange={(e) => handleFieldChange("parkingFee", Number(e.target.value))} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>高速代</label>
+            <input type="number" value={form.highwayCost || 0} onChange={(e) => handleFieldChange("highwayCost", Number(e.target.value))} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>往復距離（km）</label>
+            <input type="number" value={form.roundTripDistance || 0} onChange={(e) => handleFieldChange("roundTripDistance", Number(e.target.value))} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>距離加算</label>
+            <div style={{ padding: "8px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>¥{distanceCharge.toLocaleString("ja-JP")}</div>
+          </div>
+        </div>
+        <div style={{ marginTop: "12px", textAlign: "right", fontWeight: "bold" }}>別途料金小計: ¥{(extraSubtotal + (form.parkingFee || 0) + distanceCharge + (form.highwayCost || 0)).toLocaleString("ja-JP")}</div>
+      </section>
+
+      {/* 7-5 合計・追記 */}
+      <section style={{ marginBottom: "24px", paddingBottom: "20px", borderBottom: "1px solid #ddd" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>7-5 合計・追記</h4>
+        <div style={{ marginBottom: "16px", padding: "16px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>
+          <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "#666" }}>合計金額</p>
+          <p style={{ margin: 0, fontSize: "24px", fontWeight: "bold", color: "#d32f2f" }}>¥{total.toLocaleString("ja-JP")}</p>
+        </div>
+        <div>
+          <label style={labelStyle}>直収内容</label>
+          <textarea value={form.directCollectionNote || ""} onChange={(e) => handleFieldChange("directCollectionNote", e.target.value)} style={{ ...inputStyle, minHeight: "60px", fontFamily: "inherit" }} />
+        </div>
+      </section>
+
+      {/* 7-6 ご連絡事項 */}
+      <section style={{ marginBottom: "24px" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "16px" }}>7-6 ご連絡事項</h4>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+          <div>
+            <label style={labelStyle}>機器製造番号</label>
+            <div style={{ padding: "8px", backgroundColor: "#f5f5f5", borderRadius: "4px", fontSize: "13px" }}>{caseData.workCheckFull?.serialNo || "-"}</div>
+          </div>
+          <div>
+            <label style={labelStyle}>保証書</label>
+            <select value={form.warranty || ""} onChange={(e) => handleFieldChange("warranty", e.target.value)} style={inputStyle}>
+              <option value="">-- 選択 --</option>
+              <option value="あり">あり</option>
+              <option value="なし">なし</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      {/* 保存ボタン */}
+      <div style={{ marginTop: "20px", display: "flex", gap: "8px" }}>
+        <button onClick={saveForm} style={{ padding: "10px 20px", backgroundColor: "#4caf50", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}>
+          フォームを保存
+        </button>
+      </div>
     </div>
   );
 }
@@ -653,7 +872,7 @@ export default function CaseManagementPage() {
             <div style={{ padding: "16px" }}>
               {activeTab === "details" && <DetailsTab caseData={selectedCase} />}
               {activeTab === "workcheck" && <WorkCheckTab caseData={selectedCase} />}
-              {activeTab === "report" && <ReportTab caseData={selectedCase} workCheckState={workCheckState} />}
+              {activeTab === "report" && <ReportTab caseData={selectedCase} />}
             </div>
           </div>
         </div>

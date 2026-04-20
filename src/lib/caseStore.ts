@@ -98,6 +98,36 @@ export type WorkCheckFull = {
   signedAt?: string;
 };
 
+export type CompletionReportRow = {
+  id: string;
+  content: string;
+  qty: number;
+  unitPrice: number;
+  amount: number;
+  note?: string;
+};
+
+export type CompletionReportForm = {
+  issuerName?: string;
+  completionDate?: string;
+  issueDate?: string;
+  stName?: string;
+  salesCompany?: string;
+
+  productRows: CompletionReportRow[];
+  materialRows: CompletionReportRow[];
+
+  extraRows: CompletionReportRow[];
+  parkingFee?: number;
+  roundTripDistance?: number;
+  distanceCharge?: number;
+  highwayCost?: number;
+
+  directCollectionNote?: string;
+
+  warranty?: "あり" | "なし";
+};
+
 export type CompletionReport = {
   pdfStoragePath: string;
   qrCodeUrl: string;
@@ -108,7 +138,8 @@ export type ManagedCase = PendingCase & {
   transferredAt: string;
   status?: "pending" | "confirmed";
   workCheck?: WorkCheck;
-  workCheckFull?: any; // WorkCheckFull from workCheckSchema
+  workCheckFull?: WorkCheckFull;
+  completionReportForm?: CompletionReportForm;
   completionReport?: CompletionReport;
 };
 
