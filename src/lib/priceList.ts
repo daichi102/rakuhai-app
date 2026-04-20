@@ -90,3 +90,15 @@ export const getGroupedPrices = (): Record<string, PriceItem[]> => {
   });
   return grouped;
 };
+
+export const getProductPrices = (): Record<string, PriceItem[]> => {
+  const productCategories = ["冷蔵庫", "冷凍庫", "洗濯機", "テレビ", "乾燥機"];
+  const grouped: Record<string, PriceItem[]> = {};
+  PRICE_LIST.filter((item) => productCategories.includes(item.category)).forEach((item) => {
+    if (!grouped[item.category]) {
+      grouped[item.category] = [];
+    }
+    grouped[item.category].push(item);
+  });
+  return grouped;
+};
