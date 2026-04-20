@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import styles from "./dashboard.module.css";
+import { getManagedCases, getPendingCases } from "@/lib/caseStore";
 
 type StatCard = {
   label: string;
@@ -29,13 +30,6 @@ type MailMessage = {
   hasAttachments: boolean;
 };
 
-const stats: StatCard[] = [
-  { label: "本日の案件数", value: "0", tone: "blue" },
-  { label: "対応完了", value: "0", tone: "green" },
-  { label: "要対応", value: "0", tone: "orange" },
-  { label: "遅延リスク", value: "0", tone: "violet" }
-];
-
 const tasks: TaskCard[] = [];
 
 const menuItems = [
@@ -55,6 +49,12 @@ export default function DashboardPage() {
   const [mailMessages, setMailMessages] = useState<MailMessage[]>([]);
   const [mailError, setMailError] = useState("");
   const [expandedMailId, setExpandedMailId] = useState<string | null>(null);
+  const [stats, setStats] = useState<StatCard[]>([
+    { label: "本日の案件数", value: "0", tone: "blue" },
+    { label: "対応完了", value: "0", tone: "green" },
+    { label: "要対応", value: "0", tone: "orange" },
+    { label: "遅延リスク", value: "0", tone: "violet" }
+  ]);
 
   useEffect(() => {
     const syncMailStatus = async () => {
@@ -68,6 +68,23 @@ export default function DashboardPage() {
         setIsStatusLoading(false);
       }
     };
+
+    // 統計情報を更新
+    const pending = getPendingCases();
+    const managed = getManagedCases();
+    const today = new Date().toLocaleDateString("ja-JP");
+
+    const todayCount = [
+      ...pending,
+      ...managed
+    ].filter((c) => new Date(c.receivedAt).toLocaleDateString("ja-JP") === today).length;
+
+    setStats([
+      { label: "本日の案件数", value: String(todayCount), tone: "blue" },
+      { label: "対応完了", value: String(managed.length), tone: "green" },
+      { label: "要対応", value: String(pending.length), tone: "orange" },
+      { label: "遅延リスク", value: "0", tone: "violet" }
+    ]);
 
     void syncMailStatus();
   }, []);

@@ -9,6 +9,7 @@ import {
   getPendingCases,
   saveManagedCases,
   savePendingCases,
+  saveCaseToFirestore,
   type ManagedCase,
   type PendingCase
 } from "@/lib/caseStore";
@@ -393,7 +394,7 @@ export default function MailImportPage() {
     }
   };
 
-  const transferToCaseManagement = (caseId: string) => {
+  const transferToCaseManagement = async (caseId: string) => {
     const pending = getPendingCases();
     const target = pending.find((item) => item.id === caseId);
     if (!target) {
@@ -406,20 +407,37 @@ export default function MailImportPage() {
     const managed = getManagedCases();
     const exists = managed.some((item) => item.id === caseId);
     if (!exists) {
-      saveManagedCases([
-        {
-          ...target,
-          transferredAt: new Date().toISOString()
-        },
-        ...managed
-      ]);
+      const managedCase = {
+        ...target,
+        transferredAt: new Date().toISOString()
+      };
+      saveManagedCases([managedCase, ...managed]);
+
+      // Firestore に保存（バックグラウンド）
+      try {
+        await saveCaseToFirestore({
+          status: "managed",
+          subject: target.subject,
+          senderName: target.senderName || "",
+          senderAddress: target.senderAddress || "",
+          receivedAt: target.receivedAt,
+          preview: target.preview,
+          body: target.body,
+          aizaInfo: target.aizaInfo,
+          importedAt: target.importedAt,
+          transferredAt: managedCase.transferredAt
+        });
+      } catch (error) {
+        console.error("[Transfer] Firestore save failed:", error);
+        // localStorage への保存は成功しているので、エラーは記録のみ
+      }
     }
 
     reloadCaseLists();
     setSelectedCase((current) => (current?.id === caseId ? null : current));
   };
 
-  const transferBulkToCaseManagement = () => {
+  const transferBulkToCaseManagement = async () => {
     const targets = filteredRows.filter((item) => item.status === "pending");
     if (targets.length === 0) {
       return;
@@ -442,6 +460,27 @@ export default function MailImportPage() {
       }));
 
     saveManagedCases([...additions, ...managed]);
+
+    // Firestore に保存（バックグラウンド）
+    additions.forEach(async (item) => {
+      try {
+        await saveCaseToFirestore({
+          status: "managed",
+          subject: item.subject,
+          senderName: item.senderName || "",
+          senderAddress: item.senderAddress || "",
+          receivedAt: item.receivedAt,
+          preview: item.preview,
+          body: item.body,
+          aizaInfo: item.aizaInfo,
+          importedAt: item.importedAt,
+          transferredAt: item.transferredAt
+        });
+      } catch (error) {
+        console.error("[Bulk Transfer] Firestore save failed:", error);
+      }
+    });
+
     reloadCaseLists();
 
     if (selectedCase && targetIds.has(selectedCase.id)) {

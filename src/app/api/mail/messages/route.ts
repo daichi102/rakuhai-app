@@ -78,39 +78,69 @@ const isExcelAttachment = (filename: string, contentType: string) => {
   );
 };
 
+const getCellValue = (sheet: XLSX.Sheet, cellAddr: string): string => {
+  const cell = sheet[cellAddr];
+  if (!cell) return "";
+  return String(cell.v ?? cell.w ?? "").trim();
+};
+
+const findAizaSheet = (workbook: XLSX.WorkBook): XLSX.Sheet | undefined => {
+  const sheetNames = workbook.SheetNames.map((name) => name.toLowerCase());
+  const targetNames = ["アイザ", "アイザシート", "aiza"];
+
+  for (const target of targetNames) {
+    const idx = sheetNames.findIndex((name) => name.includes(target.toLowerCase()));
+    if (idx !== -1) {
+      return workbook.Sheets[workbook.SheetNames[idx]];
+    }
+  }
+
+  return undefined;
+};
+
 const extractAizaInfo = (contentBase64: string): AizaInfo | undefined => {
   try {
     const bytes = Buffer.from(contentBase64, "base64");
     const workbook = XLSX.read(bytes, { type: "buffer" });
-    const sheet = workbook.Sheets["アイザ"];
+    const sheet = findAizaSheet(workbook);
+
     if (!sheet) {
+      console.warn("[Aiza Extract] No sheet named 'アイザ' found. Available sheets:", workbook.SheetNames);
       return undefined;
     }
 
     const data = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" });
 
-    return {
-      orderName: String(data[8]?.[8] ?? "").trim() || undefined,
-      orderPhone: String(data[9]?.[8] ?? "").trim() || undefined,
-      orderAddress: String(data[10]?.[8] ?? "").trim() || undefined,
-      customerKana: String(data[13]?.[8] ?? "").trim() || undefined,
-      customerName: String(data[14]?.[8] ?? "").trim() || undefined,
-      customerAddress: String(data[15]?.[8] ?? "").trim() || undefined,
-      customerPhone: String(data[16]?.[8] ?? "").trim() || undefined,
-      productName: String(data[19]?.[2] ?? "").trim() || undefined,
-      productCode: String(data[19]?.[8] ?? "").trim() || undefined,
-      productColor: String(data[19]?.[18] ?? "").trim() || undefined,
-      productQty: data[19]?.[21] ? Number(data[19]?.[21]) : undefined,
-      inquiryNo: String(data[25]?.[9] ?? "").trim() || undefined,
-      visitDate: String(data[26]?.[9] ?? "").trim() || undefined,
-      hasAttendant: String(data[28]?.[9] ?? "").trim() || undefined,
-      existingRemoval: String(data[30]?.[9] ?? "").trim() || undefined,
-      warranty: String(data[32]?.[9] ?? "").trim() || undefined,
-      notes: String(data[34]?.[9] ?? "").trim() || undefined,
-      staff: String(data[37]?.[9] ?? "").trim() || undefined,
-      caution: String(data[39]?.[1] ?? "").trim() || undefined
+    const extractValue = (row: number, col: number): string | undefined => {
+      const value = String(data[row]?.[col] ?? "").trim();
+      return value || undefined;
     };
-  } catch {
+
+    const result: AizaInfo = {
+      orderName: extractValue(8, 8),
+      orderPhone: extractValue(9, 8),
+      orderAddress: extractValue(10, 8),
+      customerKana: extractValue(13, 8),
+      customerName: extractValue(14, 8),
+      customerAddress: extractValue(15, 8),
+      customerPhone: extractValue(16, 8),
+      productName: extractValue(19, 2),
+      productCode: extractValue(19, 8),
+      productColor: extractValue(19, 18),
+      productQty: data[19]?.[21] ? Number(data[19]?.[21]) : undefined,
+      inquiryNo: extractValue(25, 9),
+      visitDate: extractValue(26, 9),
+      hasAttendant: extractValue(28, 9),
+      existingRemoval: extractValue(30, 9),
+      warranty: extractValue(32, 9),
+      notes: extractValue(34, 9),
+      staff: extractValue(37, 9),
+      caution: extractValue(39, 1)
+    };
+
+    return Object.values(result).some((v) => v !== undefined) ? result : undefined;
+  } catch (error) {
+    console.error("[Aiza Extract] Failed to extract aiza info:", error instanceof Error ? error.message : "unknown error");
     return undefined;
   }
 };
@@ -180,9 +210,9 @@ export async function GET(request: Request) {
     port,
     secure,
     disableAutoIdle: true,
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 30000,
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 60000,
     auth: {
       user,
       pass: password

@@ -41,8 +41,59 @@ export type PendingCase = {
   importedAt: string;
 };
 
+export type WorkCheckItem = {
+  id: string;
+  label: string;
+  checked: boolean;
+  qty?: number;
+  unitPrice?: number;
+};
+
+export type WorkCheck = {
+  items: WorkCheckItem[];
+  subtotalInstall: number;
+  subtotalParts: number;
+  subtotalExtra: number;
+  total: number;
+  signatureDataUrl?: string;
+  signedAt?: string;
+  completedAt?: string;
+};
+
+export type CompletionReport = {
+  pdfStoragePath: string;
+  qrCodeUrl: string;
+  generatedAt: string;
+};
+
 export type ManagedCase = PendingCase & {
   transferredAt: string;
+  workCheck?: WorkCheck;
+  completionReport?: CompletionReport;
+};
+
+export type CaseStatus = "pending" | "managed" | "completed";
+
+export type Case = {
+  id: string;
+  status: CaseStatus;
+  subject: string;
+  senderName: string;
+  senderAddress: string;
+  receivedAt: string;
+  preview: string;
+  body?: string;
+  aizaInfo?: AizaInfo;
+  attachments?: {
+    filename: string;
+    size: number;
+    contentType: string;
+    isExcel: boolean;
+  }[];
+  importedAt: string;
+  transferredAt?: string;
+  workCheck?: WorkCheck;
+  completionReport?: CompletionReport;
 };
 
 const PENDING_CASES_KEY = "rakuhai_pending_cases";
@@ -84,4 +135,80 @@ export const getManagedCases = () => parseStorage<ManagedCase>(MANAGED_CASES_KEY
 
 export const saveManagedCases = (items: ManagedCase[]) => {
   writeStorage(MANAGED_CASES_KEY, items);
+};
+
+// Firestore操作関数（クライアント側で使用）
+
+let dbInstance: any = null;
+let authInstance: any = null;
+
+const getDb = async () => {
+  if (!dbInstance) {
+    const { db } = await import("@/lib/firebase");
+    dbInstance = db;
+  }
+  return dbInstance;
+};
+
+const getAuth = async () => {
+  if (!authInstance) {
+    const { auth } = await import("@/lib/firebase");
+    authInstance = auth;
+  }
+  return authInstance;
+};
+
+export const saveCaseToFirestore = async (caseData: Omit<Case, "id">) => {
+  try {
+    const { collection, addDoc } = await import("firebase/firestore");
+    const db = await getDb();
+    const auth = await getAuth();
+
+    if (!auth.currentUser) {
+      throw new Error("ユーザーがログインしていません");
+    }
+
+    const docRef = await addDoc(collection(db, "cases"), {
+      ...caseData,
+      userId: auth.currentUser.uid,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    return docRef.id;
+  } catch (error) {
+    console.error("[Firestore] Failed to save case:", error);
+    throw error;
+  }
+};
+
+export const updateWorkCheck = async (caseId: string, workCheck: WorkCheck) => {
+  try {
+    const { doc, updateDoc } = await import("firebase/firestore");
+    const db = await getDb();
+
+    await updateDoc(doc(db, "cases", caseId), {
+      workCheck,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("[Firestore] Failed to update workCheck:", error);
+    throw error;
+  }
+};
+
+export const updateCompletionReport = async (caseId: string, completionReport: CompletionReport) => {
+  try {
+    const { doc, updateDoc } = await import("firebase/firestore");
+    const db = await getDb();
+
+    await updateDoc(doc(db, "cases", caseId), {
+      completionReport,
+      status: "completed",
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("[Firestore] Failed to update completionReport:", error);
+    throw error;
+  }
 };
