@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import SignatureCanvas from "react-signature-canvas";
 import styles from "../dashboard/dashboard.module.css";
 import { getManagedCases, saveManagedCases, type ManagedCase, type WorkCheck, type WorkCheckFull, type CompletionReportForm, type CompletionReportRow, type AizaInfo } from "@/lib/caseStore";
+import { PRICE_LIST, getPriceLabel, getGroupedPrices } from "@/lib/priceList";
 import { defaultWorkCheckItems, calculateWorkCheckTotal, defaultWorkCheckFull } from "@/lib/workCheckDefaults";
 
 const menuItems = [
@@ -625,7 +626,38 @@ function ReportTab({ caseData }: { caseData: ManagedCase }) {
             {form.extraRows.map((row) => (
               <tr key={row.id} style={{ borderBottom: "1px solid #eee" }}>
                 <td style={{ padding: "8px" }}>
-                  <input type="text" value={row.content} onChange={(e) => handleRowChange("extraRows", row.id, "content", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                  <select
+                    value={row.content}
+                    onChange={(e) => {
+                      const selectedLabel = e.target.value;
+                      const matchedPrice = PRICE_LIST.find((p) => getPriceLabel(p) === selectedLabel);
+                      if (matchedPrice) {
+                        handleRowChange("extraRows", row.id, "content", selectedLabel);
+                        handleRowChange("extraRows", row.id, "unitPrice", matchedPrice.price);
+                      } else if (selectedLabel === "custom") {
+                        handleRowChange("extraRows", row.id, "content", "");
+                        handleRowChange("extraRows", row.id, "unitPrice", 0);
+                      } else {
+                        handleRowChange("extraRows", row.id, "content", selectedLabel);
+                      }
+                    }}
+                    style={{ ...inputStyle, width: "100%" }}
+                  >
+                    <option value="">-- 選択 --</option>
+                    {Object.entries(getGroupedPrices()).map(([category, items]) => (
+                      <optgroup key={category} label={category}>
+                        {items.map((item) => {
+                          const label = getPriceLabel(item);
+                          return (
+                            <option key={label} value={label}>
+                              {label} （¥{item.price.toLocaleString("ja-JP")}）
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    ))}
+                    <option value="custom">その他（手動入力）</option>
+                  </select>
                 </td>
                 <td style={{ padding: "8px", textAlign: "center" }}>
                   <input type="number" value={row.qty} onChange={(e) => handleRowChange("extraRows", row.id, "qty", Number(e.target.value))} style={{ ...inputStyle, width: "100%", textAlign: "center" }} />
