@@ -109,36 +109,60 @@ const extractAizaInfo = (contentBase64: string): AizaInfo | undefined => {
       return undefined;
     }
 
-    const data = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" });
+    const data = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+
+    // シートの全セルデータも取得（ラベル検索用）
+    const rawData = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" });
 
     const extractValue = (row: number, col: number): string | undefined => {
-      const value = String(data[row]?.[col] ?? "").trim();
+      const value = String(rawData[row]?.[col] ?? "").trim();
       return value || undefined;
     };
 
-    const result: AizaInfo = {
-      orderName: extractValue(8, 8),
-      orderPhone: extractValue(9, 8),
-      orderAddress: extractValue(10, 8),
-      customerKana: extractValue(13, 8),
-      customerName: extractValue(14, 8),
-      customerAddress: extractValue(15, 8),
-      customerPhone: extractValue(16, 8),
-      productName: extractValue(19, 2),
-      productCode: extractValue(19, 8),
-      productColor: extractValue(19, 18),
-      productQty: data[19]?.[21] ? Number(data[19]?.[21]) : undefined,
-      inquiryNo: extractValue(25, 9),
-      visitDate: extractValue(26, 9),
-      hasAttendant: extractValue(28, 9),
-      existingRemoval: extractValue(30, 9),
-      warranty: extractValue(32, 9),
-      notes: extractValue(34, 9),
-      staff: extractValue(37, 9),
-      caution: extractValue(39, 1)
+    // ラベルベースの検索関数
+    const findValueByLabel = (label: string): string | undefined => {
+      for (let row = 0; row < Math.min(rawData.length, 50); row++) {
+        for (let col = 0; col < (rawData[row]?.length ?? 0); col++) {
+          const cell = String(rawData[row]?.[col] ?? "").trim();
+          if (cell.includes(label)) {
+            // ラベルの右隣のセルを返す
+            const value = String(rawData[row]?.[col + 1] ?? "").trim();
+            return value || undefined;
+          }
+        }
+      }
+      return undefined;
     };
 
-    return Object.values(result).some((v) => v !== undefined) ? result : undefined;
+    const result: AizaInfo = {
+      // 固定セル位置で試す（従来の方法）
+      orderName: extractValue(8, 8) || findValueByLabel("発注元"),
+      orderPhone: extractValue(9, 8) || findValueByLabel("電話"),
+      orderAddress: extractValue(10, 8) || findValueByLabel("住所"),
+      customerKana: extractValue(13, 8) || findValueByLabel("顧客カナ"),
+      customerName: extractValue(14, 8) || findValueByLabel("顧客名"),
+      customerAddress: extractValue(15, 8) || findValueByLabel("お客様住所"),
+      customerPhone: extractValue(16, 8) || findValueByLabel("顧客電話"),
+      productName: extractValue(19, 2) || findValueByLabel("商品名"),
+      productCode: extractValue(19, 8) || findValueByLabel("品番"),
+      productColor: extractValue(19, 18) || findValueByLabel("色"),
+      productQty: extractValue(19, 21) ? Number(extractValue(19, 21)) : undefined,
+      inquiryNo: extractValue(25, 9) || findValueByLabel("問合番号"),
+      visitDate: extractValue(26, 9) || findValueByLabel("訪問日"),
+      hasAttendant: extractValue(28, 9) || findValueByLabel("立会"),
+      existingRemoval: extractValue(30, 9) || findValueByLabel("既設品搬出"),
+      warranty: extractValue(32, 9) || findValueByLabel("保証書"),
+      notes: extractValue(34, 9) || findValueByLabel("特記事項"),
+      staff: extractValue(37, 9) || findValueByLabel("担当者"),
+      caution: extractValue(39, 1) || findValueByLabel("注意事項")
+    };
+
+    if (Object.values(result).some((v) => v !== undefined)) {
+      console.log("[Aiza Extract] Successfully extracted info:", { hasOrderName: !!result.orderName, hasCustomerName: !!result.customerName, hasProductCode: !!result.productCode });
+      return result;
+    }
+
+    return undefined;
   } catch (error) {
     console.error("[Aiza Extract] Failed to extract aiza info:", error instanceof Error ? error.message : "unknown error");
     return undefined;
